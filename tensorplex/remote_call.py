@@ -113,6 +113,7 @@ class RemoteCall(object):
 
     @staticmethod
     def make_client_class(cls, has_return_value):
+        assert inspect.isclass(cls)
         methods = {}
 
         def __init__(self, client_id, host, port, queue_name):
