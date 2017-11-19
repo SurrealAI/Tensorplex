@@ -116,7 +116,11 @@ class RemoteCall(object):
         assert inspect.isclass(cls)
         methods = {}
 
-        def __init__(self, client_id, host, port, queue_name):
+        def __init__(self,
+                     client_id,
+                     host,
+                     port,
+                     queue_name=cls.__name__):
             self._client_id = client_id
             self._client = redis.StrictRedis(host=host, port=port)
             self._pipe = self._client.pipeline(transaction=False)

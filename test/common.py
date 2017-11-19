@@ -1,5 +1,6 @@
 import time
-from tensorplex.remote_call import *
+import os, sys
+from tensorplex import *
 
 
 class MyObject(object):

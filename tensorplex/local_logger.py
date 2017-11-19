@@ -132,25 +132,42 @@ class Logger(metaclass=_NewFormatMeta):
         else:
             return getattr(self.logger, attr)
 
-    def exception(self, msg, *args, **kwargs):
+    @staticmethod
+    def exception2str(exc):
+        buf = io.StringIO()
+        traceback.print_exception(
+            type(exc),
+            exc,
+            exc.__traceback__,
+            file=buf
+        )
+        buf = buf.getvalue().strip()
+        return '\n'.join(['#> ' + line for line in buf.split('\n')])
+
+    def exception(self, msg, *args, exc, **kwargs):
         """
         Logs a message with level ERROR on this logger. 
         Exception info is always added to the logging message. 
-        This method should only be called from an exception handler.
+
+        Args:
+            exc: the exception value that extends BaseException
+
+        Warning:
+            Only Python3 supports exception.__traceback__
         """
         if self.logger.isEnabledFor(logging.ERROR):
             msg, kwargs = self._process_msg(msg, *args, **kwargs)
-            self.exception(msg, **kwargs)
+            msg += '\n'
+            if isinstance(exc, str):  # see LoggerplexClient
+                msg += exc
+            else:
+                msg += self.exception2str(exc)
+            self.logger.error(msg, **kwargs)
     
     def log(self, level, msg, *args, **kwargs):
         """
         Log with user-defined level, e.g. INFO_V0 to INFO_V5
         """
-        if not isinstance(level, int):
-            if logging.raiseExceptions:
-                raise TypeError("level must be an integer")
-            else:
-                return
         if self.logger.isEnabledFor(level):
             msg, kwargs = self._process_msg(msg, *args, **kwargs)
             # self.logger.log(level, msg, **kwargs)
@@ -178,9 +195,11 @@ class Logger(metaclass=_NewFormatMeta):
             else:
                 msg, *args = msg
             msg, _ = self._process_msg(msg, *args, **kwargs)
-            msg = u'{sep}{space}{msg}{space}{sep}'.format(sep=sep*(repeat//2), 
-                                                          msg=msg,
-                                                          space=' ' if msg else '')
+            msg = u'{sep}{space}{msg}{space}{sep}'.format(
+                sep=sep*(repeat//2),
+                msg=msg,
+                space=' ' if msg else ''
+            )
             self._log(level, msg)
 
     @staticmethod
@@ -369,6 +388,9 @@ class Logger(metaclass=_NewFormatMeta):
                             ' or a tuple of (fmt, datefmt) strings')
         for handler in self.logger.handlers:
             handler.setFormatter(formatter)
+
+    def _log(self, level, msg, **kwargs):
+        self.logger.log(level, msg, **kwargs)
 
     @staticmethod
     def all_loggers():

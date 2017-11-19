@@ -1,5 +1,6 @@
 import logging
 import os
+import inspect
 from .local_logger import Logger
 from .remote_call import RemoteCall
 
@@ -23,31 +24,55 @@ class _DelegateLogMethod(type):
 
 
 class Loggerplex(metaclass=_DelegateLogMethod):
-    def __init__(self, folder):
+    def __init__(self, folder, overwrite=False, debug=False):
         self.log_files = {}
-        self._folder = folder
+        self.folder = os.path.expanduser(folder)
+        assert os.path.exists(self.folder), \
+            'folder {} does not exist'.format(self.folder)
         self._loggers = {}
         self._log = None  # current logger
+        self._file_mode = 'w' if overwrite else 'a'
+        self._log_level = logging.DEBUG if debug else logging.INFO
 
     def _set_client_id(self, client_id):
         if client_id in self._loggers:
             self._log = self._loggers[client_id]
         else:
-            log_file = os.path.join(self._folder, client_id + '.log')
+            log_file = os.path.join(self.folder, client_id + '.log')
             self.log_files[client_id] = log_file
             self._log = Logger.get_logger(
                 client_id,
-                level=logging.INFO,
+                level=self._log_level,
                 file_name=log_file,
-                file_mode='a',
+                file_mode=self._file_mode,
                 time_format='hms',
                 show_level=True,
                 reset_handlers=True
             )
             self._loggers[client_id] = self._log
 
+    def start_remote_call(self, host, port):
+        RemoteCall(
+            self,
+            host=host,
+            port=port,
+            queue_name=self.__class__.__name__,
+            has_client_id=True,
+            has_return_value=False
+        ).run()
+
 
 LoggerplexClient = RemoteCall.make_client_class(
     Loggerplex,
     has_return_value=False
 )
+
+
+_old_exception_method = LoggerplexClient.exception
+
+def _new_exception_method(self, *args, exc, **kwargs):
+    "stringify the traceback before sending over network"
+    exc = Logger.exception2str(exc)
+    _old_exception_method(self, *args, exc=exc, **kwargs)
+
+LoggerplexClient.exception = _new_exception_method
