@@ -217,7 +217,7 @@ class Logger(metaclass=_NewFormatMeta):
         else:
             # if `msg` isn't a format string, treat it as a normal print arg
             args = (msg,) + args
-            # if 'sep' is provided, we will use the custum separator instead
+            # if 'sep' is provided, we will use the custom separator instead
             sep = kwargs.pop('sep', ' ')
             kwargs.pop('disable_format', None)
             # e.g. "{}, {}, {}" if sep = ", "

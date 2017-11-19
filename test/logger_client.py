@@ -2,20 +2,21 @@ from test.common import *
 import traceback
 import io
 
+client = 4
 
 logger = LoggerplexClient(
-    client_id='agent1',
+    client_id='agent'+str(client),
     host='localhost',
     port=6379,
 )
 
-logger.info('my', 'value', 'is', 'shit')
-logger.error('this', 34, 'an ', 'error')
+logger.info('client', client)
+logger.error('this', client, 'an', 'error')
 try:
     1/0
 except Exception as e:
     print(e.__traceback__)
-    logger.exception('exc', 34, 'yo', exc=e)
+    logger.exception('exc', client, 'yo', exc=e)
 logger.section('yoyoyoo', sep='%')
-logger.critical('My format {:0>5d} - {:?<9}'.format(234, 'shit'))
-logger.debug('debugger {:0>5d} - {:?<9}'.format(17, 'yo'))
+logger.critical('Client format {:0>5d} - {:?<9}', client*100, 'foo')
+logger.debug('debugger {:0>5d} - {:?<9}', 10+client, 'yo')
