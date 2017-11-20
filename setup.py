@@ -9,7 +9,7 @@ def read(fname):
 
 setup(
     name='Tensorplex',
-    version='0.0.1',
+    version='0.1',
     author='Jim Fan',
     url='http://github.com/StanfordVL/Tensorplex',
     description='Distributed wrapper for Tensorboard',

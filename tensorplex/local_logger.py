@@ -3,6 +3,7 @@ import sys
 import io
 import traceback
 import logging
+import inspect
 
 _LEVEL_NAMES = {}
 for i in range(1, 10):
@@ -66,6 +67,7 @@ class _NewFormatMeta(type):
                 if self.logger.isEnabledFor(level):
                     msg, kwargs = self._process_msg(msg, *args, **kwargs)
                     self._log(level, msg, **kwargs)
+            _method.__doc__ = inspect.getdoc(getattr(logging.Logger, name))
             return _method
         
         for name in ['debug', 'info', 'warning', 'error', 'critical']:
@@ -75,11 +77,14 @@ class _NewFormatMeta(type):
         def _gen_custom_levels(level):
             def _method(self, msg, *args, **kwargs):
                 return self.log(level, msg, *args, **kwargs)
+            _method.__doc__ = "custom logging level "+str(level)
             return _method
 
         for level in range(1, 10):
-            attrs['info{}'.format(level)] = _gen_custom_levels(logging.INFO + level)
-            attrs['debug{}'.format(level)] = _gen_custom_levels(logging.DEBUG + level)
+            attrs['info{}'.format(level)] = \
+                _gen_custom_levels(logging.INFO + level)
+            attrs['debug{}'.format(level)] = \
+                _gen_custom_levels(logging.DEBUG + level)
         
         for level, name in _LEVEL_NAMES.items():
             attrs[name] = level

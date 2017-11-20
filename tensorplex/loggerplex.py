@@ -10,15 +10,16 @@ class _DelegateLogMethod(type):
     All methods called on Loggerplex will be delegated to self._log
     """
     def __new__(cls, name, bases, attrs):
-        for name in ['debug',
-                     'info',
-                     'warning',
-                     'error',
-                     'critical',
-                     'exception',
-                     'section']:
+        method_names = ['debug', 'info', 'warning', 'error',
+                   'critical', 'exception', 'section']
+        # custom info/debug levels
+        method_names += ['debug'+str(i) for i in range(1, 10)]
+        method_names += ['info'+str(i) for i in range(1, 10)]
+
+        for name in method_names:
             def _method(self, *args, __name=name, **kwargs):
                 getattr(self._log, __name)(*args, **kwargs)
+            _method.__doc__ = inspect.getdoc(getattr(Logger, name))
             attrs[name] = _method
         return super().__new__(cls, name, bases, attrs)
 
@@ -62,17 +63,20 @@ class Loggerplex(metaclass=_DelegateLogMethod):
         ).run()
 
 
-LoggerplexClient = RemoteCall.make_client_class(
-    Loggerplex,
-    has_return_value=False
-)
+def _make_loggerplex_client():
+    LoggerplexClient = RemoteCall.make_client_class(
+        Loggerplex,
+        has_return_value=False
+    )
+    _old_exception_method = LoggerplexClient.exception
+
+    def _new_exception_method(self, *args, exc, **kwargs):
+        "stringify the traceback before sending over network"
+        exc = Logger.exception2str(exc)
+        _old_exception_method(self, *args, exc=exc, **kwargs)
+
+    LoggerplexClient.exception = _new_exception_method
+    return LoggerplexClient
 
 
-_old_exception_method = LoggerplexClient.exception
-
-def _new_exception_method(self, *args, exc, **kwargs):
-    "stringify the traceback before sending over network"
-    exc = Logger.exception2str(exc)
-    _old_exception_method(self, *args, exc=exc, **kwargs)
-
-LoggerplexClient.exception = _new_exception_method
+LoggerplexClient = _make_loggerplex_client()

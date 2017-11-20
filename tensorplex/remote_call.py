@@ -147,6 +147,7 @@ class RemoteCall(object):
                     if has_return_value:
                         return RemoteFuture(self._client, call_hash)
 
+                _new_method.__doc__ = inspect.getdoc(func)  # preserve docstring
                 methods[fname] = _new_method
 
         return type(cls.__name__ + 'Client', (), methods)
