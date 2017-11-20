@@ -59,8 +59,8 @@ def make_writer_server(num_sets, host, port=6379, queue_name='remotecall', has_c
     RemoteCall(
         writer, 
         host=host,
-        port=6379,
-        queue_name='remotecall',
-        has_client_id=False,
-        has_return_value=False
+        port=port,
+        queue_name=queue_name,
+        has_client_id=has_client_id,
+        has_return_value=has_return_value
     ).run()
