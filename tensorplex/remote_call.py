@@ -112,7 +112,7 @@ class RemoteCall(object):
                 )
 
     @staticmethod
-    def make_client_class(cls, has_return_value):
+    def make_client_class(cls, has_return_value, new_cls_name=None):
         assert inspect.isclass(cls)
         methods = {}
 
@@ -130,7 +130,9 @@ class RemoteCall(object):
 
         for fname in dir(cls):
             func = getattr(cls, fname)
-            if callable(func) and not fname.startswith('_'):
+            if (callable(func) and
+                    not fname.startswith('_') and
+                    fname != 'start_server'):
                 # hijacks the function to be a redis call
                 old_sig = inspect.signature(func)
 
@@ -150,5 +152,7 @@ class RemoteCall(object):
                 _new_method.__doc__ = inspect.getdoc(func)  # preserve docstring
                 methods[fname] = _new_method
 
-        return type(cls.__name__ + 'Client', (), methods)
+        if new_cls_name is None:
+            new_cls_name = cls.__name__ + 'Client'
+        return type(new_cls_name, (), methods)
 

@@ -5,13 +5,13 @@ from .local_logger import Logger
 from .remote_call import RemoteCall
 
 
-class _DelegateLogMethod(type):
+class _DelegateMethod(type):
     """
     All methods called on Loggerplex will be delegated to self._log
     """
     def __new__(cls, name, bases, attrs):
         method_names = ['debug', 'info', 'warning', 'error',
-                   'critical', 'exception', 'section']
+                        'critical', 'exception', 'section']
         # custom info/debug levels
         method_names += ['debug'+str(i) for i in range(1, 10)]
         method_names += ['info'+str(i) for i in range(1, 10)]
@@ -24,7 +24,7 @@ class _DelegateLogMethod(type):
         return super().__new__(cls, name, bases, attrs)
 
 
-class Loggerplex(metaclass=_DelegateLogMethod):
+class Loggerplex(metaclass=_DelegateMethod):
     def __init__(self, folder, overwrite=False, debug=False):
         self.log_files = {}
         self.folder = os.path.expanduser(folder)
@@ -52,7 +52,7 @@ class Loggerplex(metaclass=_DelegateLogMethod):
             )
             self._loggers[client_id] = self._log
 
-    def start_remote_call(self, host, port):
+    def start_server(self, host, port):
         RemoteCall(
             self,
             host=host,

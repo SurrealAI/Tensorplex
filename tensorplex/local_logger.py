@@ -147,7 +147,7 @@ class Logger(metaclass=_NewFormatMeta):
             file=buf
         )
         buf = buf.getvalue().strip()
-        return '\n'.join(['#> ' + line for line in buf.split('\n')])
+        return '\n'.join(['ERROR> ' + line for line in buf.split('\n')])
 
     def exception(self, msg, *args, exc, **kwargs):
         """
