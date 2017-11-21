@@ -21,17 +21,27 @@ class _DelegateMethod(type):
             'add_text'
         ]
         for mname in method_names:
+
             def _method(self, tag, *args, __name=mname, **kwargs):
-                getattr(self._current_writer, __name)(
-                    self._current_tag+'/'+tag,
-                    *args, **kwargs
-                )
+                # access two properties: self._current_writer and _current_tag
+                tag = tag.replace(':', '.').replace('#', '.')
+                if isinstance(self._current_tag, tuple):  # indexed group
+                    group, bin_str = self._current_tag
+                    if tag.startswith('.') or tag.startswith('/'):
+                        tag = group + tag + '/' + bin_str
+                    else:
+                        tag = group + '/' + tag + '/' + bin_str
+                else:  # normal group
+                    group = self._current_tag
+                    if tag.startswith('.') or tag.startswith('/'):
+                        tag = group + tag
+                    else:
+                        tag = group + '/' + tag
+                getattr(self._current_writer, __name)(tag, *args, **kwargs )
+
             _method.__doc__ = inspect.getdoc(getattr(SummaryWriter, mname))
             attrs[mname] = _method
         return super().__new__(cls, name, bases, attrs)
-
-
-NumberedGroup = namedtuple('NumberedGroup', 'name, N, bin_size')
 
 
 class TensorplexServer(metaclass=_DelegateMethod):
@@ -40,27 +50,44 @@ class TensorplexServer(metaclass=_DelegateMethod):
     Different folders with same run tag ("agent/1/reward")
         -> different curves (diff color) in the same graph
     Different run tags in the same folder -> same color in different graphs
+
+    Methods:
+        add_scalar,
+        add_scalars,
+        add_audio,
+        add_embedding,
+        add_histogram,
+        add_image,
+        add_text
+
+    The first arg to all above methods is `tag`.
+    Tag can have '/' or ':' or '.' in it.
+    If starts with ':' or '.', the tag will be treated as a separate section.
+    '/' groups the rest of the string below a section.
+    For example, ':learning:rate/my/group/eps' is under
+        "<client_id>.learning.rate" section.
     """
     def __init__(self,
                  folder,
                  normal_groups,
-                 numbered_groups):
+                 indexed_groups,
+                 index_bin_sizes):
         """
         Args:
             folder: tensorboard file root folder
-            normal_groups: a list of group names
-            numbered_groups: a list of NumberedGroup tuples
+            normal_groups: a list of normal group names
+            indexed_groups: a list of indexed group names
+            index_bin_sizes: list of bin sizes for each numbered group
         """
         self.folder = os.path.expanduser(folder)
         mkdir(self.folder)
         assert os.path.exists(self.folder), 'cannot create folder '+self.folder
         assert isinstance(normal_groups, list)
         self._normal_groups = normal_groups
-        assert isinstance(numbered_groups, list)
-        self._numbered_groups = {}
-        for g in numbered_groups:
-            assert isinstance(g, NumberedGroup)
-            self._numbered_groups[g.name] = g
+        assert isinstance(indexed_groups, list)
+        assert isinstance(index_bin_sizes, list)
+        assert len(index_bin_sizes) == len(indexed_groups)
+        self._indexed_groups = dict(zip(indexed_groups, index_bin_sizes))
 
         self._writers = {}  # subfolder_path: SummaryWriter instance
         for g in self._normal_groups:
@@ -68,22 +95,23 @@ class TensorplexServer(metaclass=_DelegateMethod):
             subfolder = os.path.join(self.folder, g)
             mkdir(subfolder)
             self._writers[g] = SummaryWriter(subfolder)
-        for g in self._numbered_groups.values():
-            name, N, bin_size = g
-            assert N > 1 and bin_size > 0
-            for i in range(N):
-                writerID = '{}/{}'.format(name, i)
-                subfolder = os.path.join(self.folder, writerID)
-                mkdir(subfolder)
-                self._writers[writerID] = SummaryWriter(subfolder)
+        # following are used in the meta-class method delegation
         self._current_tag = None
         self._current_writer = None
 
-    def _get_bin_str(self, ID, N, bin_size):
-        assert 0 <= ID < N
+    def _get_index_writer(self, group, index):
+        writerID = '{}/{}'.format(group, index)
+        if writerID not in self._writers:
+            # index doesn't exist yet, create a new writer
+            subfolder = os.path.join(self.folder, writerID)
+            mkdir(subfolder)
+            self._writers[writerID] = SummaryWriter(subfolder)
+        return self._writers[writerID]
+
+    def _get_bin_str(self, ID, bin_size):
         start = ID // bin_size * bin_size
         end = (ID // bin_size + 1) * bin_size - 1
-        end = min(end, N - 1)
+        # end = min(end, N - 1)
         if start == end:
             return str(start)
         else:
@@ -104,22 +132,18 @@ class TensorplexServer(metaclass=_DelegateMethod):
         assert len(_parts) == 2
         group, ID = _parts
         if group in self._normal_groups:
-            # ID will be the root tag
+            # normal group root tag will simply be ID
             self._current_tag = ID
             self._current_writer = self._writers[group]
-        elif group in self._numbered_groups:
+        elif group in self._indexed_groups:
             assert str.isdigit(ID), 'numbered group ID must be int'
             ID = int(ID)
-            group_spec = self._numbered_groups[group]
-            N, bin_size = group_spec.N, group_spec.bin_size
-            assert 0 <= ID < N, \
-                '{} ID {} must be in range [0, {})'.format(group, ID, N)
-            # current tag looks like 0-7 or 8-15
-            self._current_tag = '{}/{}'.format(
+            # indexed group's current tag is a tuple ("agent", "8-15")
+            self._current_tag = (
                 group,
-                self._get_bin_str(ID, N, bin_size)
+                self._get_bin_str(ID, self._indexed_groups[group])
             )
-            self._current_writer = self._writers[client_id]
+            self._current_writer = self._get_index_writer(group, ID)
         else:
             raise ValueError('Group "{}" not found'.format(group))
 

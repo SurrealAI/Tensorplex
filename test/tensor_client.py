@@ -7,7 +7,8 @@ import io
 def plot(writer, shift):
     x = math.pi / 200
     for i in range(0, 300):
-        writer.add_scalar('sin', math.sin(x*i +math.pi*shift) * (1+shift), i)
+        writer.add_scalar('.my#section/foo', math.sin(x*i +math.pi*shift) * (1+shift), i)
+        writer.add_scalar(':my.section/bar', math.sin(x*i +math.pi*shift) * (1+shift)* math.exp(i/200), i)
         writer.add_scalar('cos', 2 * math.cos(x*i + math.pi*shift)/(1+shift) * math.exp(-i/100), i)
 
 
@@ -21,7 +22,7 @@ for i in range(27):
 
 for i in range(13):
     t = TensorplexClient(
-        client_id='duplic/'+str(i),
+        client_id='multip/'+str(i),
         host='localhost',
         port=6379,
     )
