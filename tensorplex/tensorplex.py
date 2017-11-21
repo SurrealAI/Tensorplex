@@ -20,14 +20,14 @@ class _DelegateMethod(type):
             'add_image',
             'add_text'
         ]
-        for name in method_names:
-            def _method(self, tag, *args, __name=name, **kwargs):
+        for mname in method_names:
+            def _method(self, tag, *args, __name=mname, **kwargs):
                 getattr(self._current_writer, __name)(
                     self._current_tag+'/'+tag,
                     *args, **kwargs
                 )
-            _method.__doc__ = inspect.getdoc(getattr(SummaryWriter, name))
-            attrs[name] = _method
+            _method.__doc__ = inspect.getdoc(getattr(SummaryWriter, mname))
+            attrs[mname] = _method
         return super().__new__(cls, name, bases, attrs)
 
 

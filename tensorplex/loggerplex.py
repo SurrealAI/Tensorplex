@@ -16,11 +16,11 @@ class _DelegateMethod(type):
         method_names += ['debug'+str(i) for i in range(1, 10)]
         method_names += ['info'+str(i) for i in range(1, 10)]
 
-        for name in method_names:
-            def _method(self, *args, __name=name, **kwargs):
+        for mname in method_names:
+            def _method(self, *args, __name=mname, **kwargs):
                 getattr(self._log, __name)(*args, **kwargs)
-            _method.__doc__ = inspect.getdoc(getattr(Logger, name))
-            attrs[name] = _method
+            _method.__doc__ = inspect.getdoc(getattr(Logger, mname))
+            attrs[mname] = _method
         return super().__new__(cls, name, bases, attrs)
 
 
