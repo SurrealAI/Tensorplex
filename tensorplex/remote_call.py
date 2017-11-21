@@ -4,7 +4,14 @@ import redis
 import inspect
 import pickle
 import binascii
-import time
+
+
+def mkdir(fpath):
+    """
+    Recursively creates all the subdirs
+    If exist, do nothing.
+    """
+    os.makedirs(os.path.expanduser(fpath), exist_ok=True)
 
 
 def _rand_str():

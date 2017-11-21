@@ -1,7 +1,7 @@
 import logging
 import os
 import inspect
-from .remote_call import RemoteCall
+from .remote_call import RemoteCall, mkdir
 from tensorboardX import SummaryWriter
 from collections import namedtuple
 
@@ -31,14 +31,6 @@ class _DelegateMethod(type):
         return super().__new__(cls, name, bases, attrs)
 
 
-def mkdir(fpath):
-    """
-    Recursively creates all the subdirs
-    If exist, do nothing.
-    """
-    os.makedirs(os.path.expanduser(fpath), exist_ok=True)
-
-
 NumberedGroup = namedtuple('NumberedGroup', 'name, N, bin_size')
 
 
@@ -60,8 +52,8 @@ class TensorplexServer(metaclass=_DelegateMethod):
             numbered_groups: a list of NumberedGroup tuples
         """
         self.folder = os.path.expanduser(folder)
-        assert os.path.exists(self.folder), \
-            'folder {} does not exist'.format(self.folder)
+        mkdir(self.folder)
+        assert os.path.exists(self.folder), 'cannot create folder '+self.folder
         assert isinstance(normal_groups, list)
         self._normal_groups = normal_groups
         assert isinstance(numbered_groups, list)

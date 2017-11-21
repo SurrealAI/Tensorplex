@@ -2,7 +2,7 @@ import logging
 import os
 import inspect
 from .local_logger import Logger
-from .remote_call import RemoteCall
+from .remote_call import RemoteCall, mkdir
 
 
 class _DelegateMethod(type):
@@ -28,8 +28,8 @@ class LoggerplexServer(metaclass=_DelegateMethod):
     def __init__(self, folder, overwrite=False, debug=False):
         self.log_files = {}
         self.folder = os.path.expanduser(folder)
-        assert os.path.exists(self.folder), \
-            'folder {} does not exist'.format(self.folder)
+        mkdir(self.folder)
+        assert os.path.exists(self.folder), 'cannot create folder '+self.folder
         self._loggers = {}
         self._log = None  # current logger
         self._file_mode = 'w' if overwrite else 'a'
