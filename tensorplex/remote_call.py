@@ -143,7 +143,8 @@ class RemoteCall(object):
                     __old_sig.bind(self, *args, **kwargs)  # check signature
                     call_hash = _rand_str()
                     data = (__fname, args, kwargs, self._client_id, call_hash)
-                    self._pipe.set(_flag(call_hash), '1')
+                    if has_return_value:
+                        self._pipe.set(_flag(call_hash), '1')
                     self._pipe.lpush(self._queue_name, pickle.dumps(data))
                     self._pipe.execute()
                     if has_return_value:
