@@ -8,7 +8,7 @@ from collections import namedtuple
 
 class _DelegateMethod(type):
     """
-    All methods called on Loggerplex will be delegated to self._log
+    All methods called on LoggerplexServer will be delegated to self._log
     """
     def __new__(cls, name, bases, attrs):
         method_names = [
@@ -42,7 +42,7 @@ def mkdir(fpath):
 NumberedGroup = namedtuple('NumberedGroup', 'name, N, bin_size')
 
 
-class Tensorplex(metaclass=_DelegateMethod):
+class TensorplexServer(metaclass=_DelegateMethod):
     """
     https://github.com/tensorflow/tensorboard/issues/300
     Different folders with same run tag ("agent/1/reward")
@@ -143,6 +143,7 @@ class Tensorplex(metaclass=_DelegateMethod):
 
 
 TensorplexClient = RemoteCall.make_client_class(
-    Tensorplex,
+    TensorplexServer,
+    new_cls_name='TensorplexClient',
     has_return_value=False,
 )

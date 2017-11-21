@@ -112,7 +112,7 @@ class RemoteCall(object):
                 )
 
     @staticmethod
-    def make_client_class(cls, has_return_value, new_cls_name=None):
+    def make_client_class(cls, new_cls_name, has_return_value):
         assert inspect.isclass(cls)
         methods = {}
 
@@ -153,7 +153,5 @@ class RemoteCall(object):
                 _new_method.__doc__ = inspect.getdoc(func)  # preserve docstring
                 methods[fname] = _new_method
 
-        if new_cls_name is None:
-            new_cls_name = cls.__name__ + 'Client'
         return type(new_cls_name, (), methods)
 

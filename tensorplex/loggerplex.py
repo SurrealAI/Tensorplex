@@ -7,7 +7,7 @@ from .remote_call import RemoteCall
 
 class _DelegateMethod(type):
     """
-    All methods called on Loggerplex will be delegated to self._log
+    All methods called on LoggerplexServer will be delegated to self._log
     """
     def __new__(cls, name, bases, attrs):
         method_names = ['debug', 'info', 'warning', 'error',
@@ -24,7 +24,7 @@ class _DelegateMethod(type):
         return super().__new__(cls, name, bases, attrs)
 
 
-class Loggerplex(metaclass=_DelegateMethod):
+class LoggerplexServer(metaclass=_DelegateMethod):
     def __init__(self, folder, overwrite=False, debug=False):
         self.log_files = {}
         self.folder = os.path.expanduser(folder)
@@ -65,7 +65,8 @@ class Loggerplex(metaclass=_DelegateMethod):
 
 def _make_loggerplex_client():
     LoggerplexClient = RemoteCall.make_client_class(
-        Loggerplex,
+        LoggerplexServer,
+        new_cls_name='LoggerplexClient',
         has_return_value=False
     )
     _old_exception_method = LoggerplexClient.exception
