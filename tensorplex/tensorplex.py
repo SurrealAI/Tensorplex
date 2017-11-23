@@ -1,4 +1,4 @@
-import logging
+import json
 import os
 import inspect
 from .remote_call import RemoteCall, mkdir
@@ -13,7 +13,6 @@ class _DelegateMethod(type):
     def __new__(cls, name, bases, attrs):
         method_names = [
             'add_scalar',
-            'add_scalars',
             'add_audio',
             'add_embedding',
             'add_histogram',
@@ -146,6 +145,35 @@ class TensorplexServer(metaclass=_DelegateMethod):
             self._current_writer = self._get_index_writer(group, ID)
         else:
             raise ValueError('Group "{}" not found'.format(group))
+
+    def add_scalars(self, tag_scalar_dict, global_step=None):
+        """
+        Tensorplex's add_scalars() is simply calling add_scalar() multiple times.
+        It is NOT the same as `add_scalars()` in the original Tensorboard-pytorch
+        API!! The original behavior is more like Tensorplex's "numbered group"
+        concept:
+        http://tensorboard-pytorch.readthedocs.io/en/latest/_modules/tensorboardX/writer.html#SummaryWriter.add_scalars
+        """
+        for tag, value in tag_scalar_dict.items():
+            self.add_scalar(tag, value, global_step=global_step)
+
+    def export_scalar_dict(self):
+        """
+        Format: {writer_id : [[timestamp, step, value], ...] ...}
+
+        http://tensorboard-pytorch.readthedocs.io/en/latest/_modules/tensorboardX/writer.html#SummaryWriter.export_scalars_to_json
+        """
+        return {writerID: writer.scalar_dict
+                for writerID, writer
+                in self._writers.items()}
+
+    def export_json(self, file_path, indent=4):
+        """
+        Format: {writer_id : [[timestamp, step, value], ...] ...}
+        """
+        file_path = os.path.expanduser(file_path)
+        with open(file_path, 'w') as f:
+            json.dump(self.export_scalar_dict(), f, indent=indent)
 
     def start_server(self, host, port):
         RemoteCall(

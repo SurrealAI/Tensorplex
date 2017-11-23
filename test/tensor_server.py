@@ -1,6 +1,7 @@
 from redis import StrictRedis
 from tensorplex import *
 
+os.system('rm -rf ~/Temp/loggerplex')
 tplex = TensorplexServer('~/Temp/loggerplex',
                          normal_groups=['learner', 'eval'],
                          indexed_groups=['agent', 'multip', 'individ'],
