@@ -66,13 +66,7 @@ class TensorplexServer(metaclass=_DelegateMethod):
     For example, ':learning:rate/my/group/eps' is under
         "<client_id>.learning.rate" section.
     """
-    def __init__(self,
-                 folder,
-                 normal_groups,
-                 combined_groups,
-                 combined_bin_dict,  # TODO dict of list of (bin_name, criterion)
-                 indexed_groups,
-                 index_bin_sizes):
+    def __init__(self, folder):
         """
         Args:
             folder: tensorboard file root folder
@@ -83,25 +77,61 @@ class TensorplexServer(metaclass=_DelegateMethod):
         self.folder = os.path.expanduser(folder)
         mkdir(self.folder)
         assert os.path.exists(self.folder), 'cannot create folder '+self.folder
-        assert isinstance(normal_groups, list)
-        self._normal_groups = normal_groups
-        assert isinstance(combined_groups, list)
-        self._combined_groups = combined_groups
-        self._combined_bin_dict = combined_bin_dict
-        assert isinstance(indexed_groups, list)
-        assert isinstance(index_bin_sizes, list)
-        assert len(index_bin_sizes) == len(indexed_groups)
-        self._index_bin_size = dict(zip(indexed_groups, index_bin_sizes))
+        self.normal_groups = []
+        self.indexed_groups = []
+        self._indexed_bin_size = {}
+        self.combined_groups = []
+        self._combined_tag_to_bin_name = {}
 
         self._writers = {}  # subfolder_path: SummaryWriter instance
-        for g in self._normal_groups:
-            assert isinstance(g, str), 'normal group name {} must be str'.format(g)
-            subfolder = os.path.join(self.folder, g)
-            mkdir(subfolder)
-            self._writers[g] = SummaryWriter(subfolder)
         # following are used in the meta-class method delegation
         self._current_tag = None
         self._current_writer = None
+
+    def register_normal_group(self, name):
+        self.normal_groups.append(name)
+        subfolder = os.path.join(self.folder, name)
+        mkdir(subfolder)
+        self._writers[name] = SummaryWriter(subfolder)
+        return self
+
+    def register_combined_group(self, name, tag_to_bin_name):
+        """
+        Args:
+            name: group name, will create a subfolder for the group
+            tag_to_bin_name: a function that map a tag name to a combined bin
+                name. Example: you have 9 different tags
+                (red, green, blue, orange, apple, A, B, C, D)
+                def tag_to_bin_name(tag):
+                    if tag in ['red', 'green', 'blue']:
+                        return ':color'  # make a new bin section
+                    elif len(tag) == 1:
+                        return 'alphabet'
+                    else:
+                        return ':fruit'
+                Your graph will then have 3 curves under "mygroup.color"
+                2 curves under "mygroup.fruit", and 4 under "mygroup/alphabet"
+        """
+        assert callable(tag_to_bin_name)
+        self.combined_groups.append(name)
+        self._combined_tag_to_bin_name[name] = tag_to_bin_name
+        return self
+
+    def register_indexed_group(self, name, bin_size):
+        """
+        Args:
+            name: group name, will create a subfolder for the group
+            bin_size: int
+                Example: you have 42 processes in the indexed group.
+                if bin_size == 10, process 6 will be assigned to the first bin
+                "0-9", process 22 will be assigned to the third bin "20-29",
+                process 42 will be assigned to the last bin "40-49"
+                You don't need to know the total number of processes in advance.
+        """
+        assert isinstance(bin_size, int) and bin_size > 0
+        self.indexed_groups.append(name)
+        self._indexed_bin_size[name] = bin_size
+        return self
 
     def _get_sub_writer(self, group, index):
         """
@@ -116,7 +146,7 @@ class TensorplexServer(metaclass=_DelegateMethod):
         return self._writers[writerID]
 
     def _index_bin_name(self, group, ID):
-        bin_size = self._index_bin_size[group]
+        bin_size = self._indexed_bin_size[group]
         start = ID // bin_size * bin_size
         end = (ID // bin_size + 1) * bin_size - 1
         # end = min(end, N - 1)
@@ -126,12 +156,15 @@ class TensorplexServer(metaclass=_DelegateMethod):
             return '{}-{}'.format(start, end)
 
     def _combined_bin_name(self, group, ID):
-        for bin_name, criterion in self._combined_bin_dict[group]:
-            if callable(criterion) and criterion(ID):
-                return bin_name
-            elif isinstance(criterion, list) and ID in criterion:
-                return bin_name
-        return ID  # no bin found, fallback
+        try:
+            bin_name = self._combined_tag_to_bin_name[group](ID)
+        except Exception as e:
+            raise ValueError('tag_to_bin_name function raises exception. '
+                     'Its semantics should be (str) -> str that maps a tag '
+                     'name to a combined bin name.') from e
+        assert isinstance(bin_name, str), \
+            'returned bin_name {} must be a string'.format(bin_name)
+        return bin_name
 
     def _set_client_id(self, client_id):
         """
@@ -145,21 +178,21 @@ class TensorplexServer(metaclass=_DelegateMethod):
         """
         assert '/' in client_id
         _parts = client_id.split('/')
-        assert len(_parts) == 2
+        assert len(_parts) == 2, 'client str must be "<group>/<id>"'
         group, ID = _parts
-        if group in self._normal_groups:
+        if group in self.normal_groups:
             # normal group root tag is simply ID
             self._current_tag = ID
             self._current_writer = self._writers[group]
-        elif group in self._combined_groups:
+        elif group in self.combined_groups:
             # combined group's tag is tuple ("group", "pre-defined bin name")
             self._current_tag = (
                 group,
                 self._combined_bin_name(group, ID)
             )
             self._current_writer = self._get_sub_writer(group, ID)
-        elif group in self._index_bin_size:
-            assert str.isdigit(ID), 'numbered group ID must be int'
+        elif group in self.indexed_groups:
+            assert str.isdigit(ID), 'indexed group ID must be int'
             ID = int(ID)
             # indexed group's current tag is a tuple ("agent", "8-15")
             self._current_tag = (
@@ -168,7 +201,16 @@ class TensorplexServer(metaclass=_DelegateMethod):
             )
             self._current_writer = self._get_sub_writer(group, ID)
         else:
-            raise ValueError('Group "{}" not found'.format(group))
+            all_groups = (
+                self.normal_groups
+                + self.combined_groups
+                + self.indexed_groups
+            )
+            if not all_groups:
+                raise RuntimeError('You must register at least one group.')
+            else:
+                raise ValueError('Group "{}" not found. Available groups: {}'
+                                 .format(group, all_groups))
 
     def add_scalars(self, tag_scalar_dict, global_step):
         """

@@ -2,16 +2,19 @@ from redis import StrictRedis
 from tensorplex import *
 
 os.system('rm -rf ~/Temp/loggerplex/*')
-tplex = TensorplexServer('~/Temp/loggerplex',
-                         normal_groups=['learner'],
-                         combined_groups=['eval'],
-                         combined_bin_dict={
-                             'eval': [
-                                 ('stocha', lambda tag: tag.startswith('stocha')),
-                                 ('allothers', lambda tag: True)
-                             ]
-                         },
-                         indexed_groups=['agent', 'individ'],
-                         index_bin_sizes=[8, 1])
+tplex = TensorplexServer('~/Temp/loggerplex')
+
+def get_eval_bin_name(tag):
+    if tag.startswith('stocha'):
+        return 'stocha'
+    else:
+        return 'others'
+
+(tplex
+    .register_normal_group('learner')
+    .register_combined_group('eval', get_eval_bin_name)
+    .register_indexed_group('agent', 8)
+    .register_indexed_group('individ', 1)
+ )
 StrictRedis().flushall()
 tplex.start_server('localhost', 6379)
