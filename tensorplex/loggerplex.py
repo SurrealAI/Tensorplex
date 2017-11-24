@@ -67,7 +67,8 @@ def _make_loggerplex_client():
     LoggerplexClient = RemoteCall.make_client_class(
         LoggerplexServer,
         new_cls_name='LoggerplexClient',
-        has_return_value=False
+        has_return_value=False,
+        exclude_methods=['start_server'],
     )
     _old_exception_method = LoggerplexClient.exception
 

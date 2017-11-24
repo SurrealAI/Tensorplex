@@ -25,11 +25,11 @@ class _DelegateMethod(type):
                 # access two properties: self._current_writer and _current_tag
                 tag = tag.replace(':', '.').replace('#', '.')
                 if isinstance(self._current_tag, tuple):  # indexed group
-                    group, bin_str = self._current_tag
+                    group, bin_name = self._current_tag
                     if tag.startswith('.') or tag.startswith('/'):
-                        tag = group + tag + '/' + bin_str
+                        tag = group + tag + '/' + bin_name
                     else:
-                        tag = group + '/' + tag + '/' + bin_str
+                        tag = group + '/' + tag + '/' + bin_name
                 else:  # normal group
                     group = self._current_tag
                     if tag.startswith('.') or tag.startswith('/'):
@@ -69,13 +69,15 @@ class TensorplexServer(metaclass=_DelegateMethod):
     def __init__(self,
                  folder,
                  normal_groups,
+                 combined_groups,
+                 combined_bin_dict,  # TODO dict of list of (bin_name, criterion)
                  indexed_groups,
                  index_bin_sizes):
         """
         Args:
             folder: tensorboard file root folder
-            normal_groups: a list of normal group names
-            indexed_groups: a list of indexed group names
+            normal_groups: list of normal group names
+            indexed_groups: list of indexed group names
             index_bin_sizes: list of bin sizes for each numbered group
         """
         self.folder = os.path.expanduser(folder)
@@ -83,10 +85,13 @@ class TensorplexServer(metaclass=_DelegateMethod):
         assert os.path.exists(self.folder), 'cannot create folder '+self.folder
         assert isinstance(normal_groups, list)
         self._normal_groups = normal_groups
+        assert isinstance(combined_groups, list)
+        self._combined_groups = combined_groups
+        self._combined_bin_dict = combined_bin_dict
         assert isinstance(indexed_groups, list)
         assert isinstance(index_bin_sizes, list)
         assert len(index_bin_sizes) == len(indexed_groups)
-        self._indexed_groups = dict(zip(indexed_groups, index_bin_sizes))
+        self._index_bin_size = dict(zip(indexed_groups, index_bin_sizes))
 
         self._writers = {}  # subfolder_path: SummaryWriter instance
         for g in self._normal_groups:
@@ -98,7 +103,10 @@ class TensorplexServer(metaclass=_DelegateMethod):
         self._current_tag = None
         self._current_writer = None
 
-    def _get_index_writer(self, group, index):
+    def _get_sub_writer(self, group, index):
+        """
+        Used by both indexed group and combined group
+        """
         writerID = '{}/{}'.format(group, index)
         if writerID not in self._writers:
             # index doesn't exist yet, create a new writer
@@ -107,7 +115,8 @@ class TensorplexServer(metaclass=_DelegateMethod):
             self._writers[writerID] = SummaryWriter(subfolder)
         return self._writers[writerID]
 
-    def _get_bin_str(self, ID, bin_size):
+    def _index_bin_name(self, group, ID):
+        bin_size = self._index_bin_size[group]
         start = ID // bin_size * bin_size
         end = (ID // bin_size + 1) * bin_size - 1
         # end = min(end, N - 1)
@@ -115,6 +124,14 @@ class TensorplexServer(metaclass=_DelegateMethod):
             return str(start)
         else:
             return '{}-{}'.format(start, end)
+
+    def _combined_bin_name(self, group, ID):
+        for bin_name, criterion in self._combined_bin_dict[group]:
+            if callable(criterion) and criterion(ID):
+                return bin_name
+            elif isinstance(criterion, list) and ID in criterion:
+                return bin_name
+        return ID  # no bin found, fallback
 
     def _set_client_id(self, client_id):
         """
@@ -131,22 +148,29 @@ class TensorplexServer(metaclass=_DelegateMethod):
         assert len(_parts) == 2
         group, ID = _parts
         if group in self._normal_groups:
-            # normal group root tag will simply be ID
+            # normal group root tag is simply ID
             self._current_tag = ID
             self._current_writer = self._writers[group]
-        elif group in self._indexed_groups:
+        elif group in self._combined_groups:
+            # combined group's tag is tuple ("group", "pre-defined bin name")
+            self._current_tag = (
+                group,
+                self._combined_bin_name(group, ID)
+            )
+            self._current_writer = self._get_sub_writer(group, ID)
+        elif group in self._index_bin_size:
             assert str.isdigit(ID), 'numbered group ID must be int'
             ID = int(ID)
             # indexed group's current tag is a tuple ("agent", "8-15")
             self._current_tag = (
                 group,
-                self._get_bin_str(ID, self._indexed_groups[group])
+                self._index_bin_name(group, ID)
             )
-            self._current_writer = self._get_index_writer(group, ID)
+            self._current_writer = self._get_sub_writer(group, ID)
         else:
             raise ValueError('Group "{}" not found'.format(group))
 
-    def add_scalars(self, tag_scalar_dict, global_step=None):
+    def add_scalars(self, tag_scalar_dict, global_step):
         """
         Tensorplex's add_scalars() is simply calling add_scalar() multiple times.
         It is NOT the same as `add_scalars()` in the original Tensorboard-pytorch
@@ -190,4 +214,10 @@ TensorplexClient = RemoteCall.make_client_class(
     TensorplexServer,
     new_cls_name='TensorplexClient',
     has_return_value=False,
+    exclude_methods=[
+        'start_server',
+        'register_normal_group',
+        'register_combined_group',
+        'register_indexed_group',
+    ],
 )

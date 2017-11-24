@@ -22,14 +22,6 @@ for i in range(27):
         host='localhost',
         port=6379,
     )
-    plot(t, 0.08 * i)
-
-for i in range(13):
-    t = TensorplexClient(
-        client_id='multip/'+str(i),
-        host='localhost',
-        port=6379,
-    )
     plot(t, -0.12 * i)
 
 for i in range(5):
@@ -48,7 +40,7 @@ for i, tag in enumerate(['lr', 'momentum', 'eps']):
     )
     plot(t, 0.1 * i)
 
-for i, tag in enumerate(['score', 'speed_iter_s']):
+for i, tag in enumerate(['deterministic', 'stochastic-1', 'stochastic-2', 'exploratory']):
     t = TensorplexClient(
         client_id='eval/'+tag,
         host='localhost',

@@ -119,9 +119,22 @@ class RemoteCall(object):
                 )
 
     @staticmethod
-    def make_client_class(cls, new_cls_name, has_return_value):
+    def make_client_class(cls,
+                          new_cls_name,
+                          has_return_value,
+                          exclude_methods=None):
+        """
+        Args:
+            cls:
+            new_cls_name:
+            has_return_value:
+            exclude_methods: list of instance methods to be excluded in the
+                proxy API if None, include all non-private methods from server
+        """
         assert inspect.isclass(cls)
         methods = {}
+        if exclude_methods is None:
+            exclude_methods = []
 
         def __init__(self,
                      client_id,
@@ -139,7 +152,7 @@ class RemoteCall(object):
             func = getattr(cls, fname)
             if (callable(func) and
                     not fname.startswith('_') and
-                    fname != 'start_server'):
+                    not fname in exclude_methods):
                 # hijacks the function to be a redis call
                 old_sig = inspect.signature(func)
 
