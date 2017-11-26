@@ -3,21 +3,7 @@ import sys
 import redis
 import inspect
 import pickle
-import binascii
-import multiprocessing
-
-
-def mkdir(fpath):
-    """
-    Recursively creates all the subdirs
-    If exist, do nothing.
-    """
-    os.makedirs(os.path.expanduser(fpath), exist_ok=True)
-
-
-def _rand_str():
-    rand_bin = os.urandom(24)
-    return binascii.b2a_base64(rand_bin).decode('utf-8')[:-3]  # len 30
+from .utils import random_string
 
 
 def _flag(call_hash):
@@ -162,7 +148,7 @@ class RemoteCall(object):
                                 __fname=fname,
                                 **kwargs):
                     __old_sig.bind(self, *args, **kwargs)  # check signature
-                    call_hash = _rand_str()
+                    call_hash = random_string()
                     data = (__fname, args, kwargs, self._client_id, call_hash)
                     if has_return_value:
                         self._pipe.set(_flag(call_hash), '1')

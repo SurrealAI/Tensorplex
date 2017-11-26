@@ -2,7 +2,8 @@ import logging
 import os
 import inspect
 from .logger import Logger
-from .remote_call import RemoteCall, mkdir
+from .remote_call import RemoteCall
+from .utils import mkdir
 from .local_proxy import LocalProxy
 
 

@@ -1,7 +1,8 @@
 import json
 import os
 import inspect
-from .remote_call import RemoteCall, mkdir
+from .remote_call import RemoteCall
+from .utils import mkdir
 from tensorboardX import SummaryWriter
 from collections import namedtuple
 from .local_proxy import LocalProxy

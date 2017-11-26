@@ -75,7 +75,7 @@ if 1:
         run2()
         run3()
 
-if 1:
+if 0:
     ts = [threading.Thread(target=eval('run'+str(i))) for i in range(4)]
     clear()
     with Timer():
