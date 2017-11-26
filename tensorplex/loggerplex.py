@@ -2,7 +2,7 @@ import logging
 import os
 import inspect
 from .local_logger import Logger
-from .remote_call import RemoteCall, mkdir
+from .remote_call import RemoteCall, mkdir, LocalProxy
 
 
 class _DelegateMethod(type):
@@ -25,6 +25,8 @@ class _DelegateMethod(type):
 
 
 class LoggerplexServer(metaclass=_DelegateMethod):
+    EXCLUDE_METHODS = ['start_server']
+
     def __init__(self, folder, overwrite=False, debug=False):
         self.log_files = {}
         self.folder = os.path.expanduser(folder)
@@ -62,13 +64,20 @@ class LoggerplexServer(metaclass=_DelegateMethod):
             has_return_value=False
         ).run()
 
+    def get_proxy(self, client_id):
+        """
+        Must be called AFTER registering all the groups!
+        """
+        return LocalProxy(self, client_id,
+                          exclude_methods=self.EXCLUDE_METHODS)
+
 
 def _make_loggerplex_client():
     LoggerplexClient = RemoteCall.make_client_class(
         LoggerplexServer,
         new_cls_name='LoggerplexClient',
         has_return_value=False,
-        exclude_methods=['start_server'],
+        exclude_methods=LoggerplexServer.EXCLUDE_METHODS,
     )
     _old_exception_method = LoggerplexClient.exception
 

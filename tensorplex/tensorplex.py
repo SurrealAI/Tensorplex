@@ -1,7 +1,7 @@
 import json
 import os
 import inspect
-from .remote_call import RemoteCall, mkdir
+from .remote_call import RemoteCall, mkdir, LocalProxy
 from tensorboardX import SummaryWriter
 from collections import namedtuple
 
@@ -44,6 +44,12 @@ class _DelegateMethod(type):
 
 
 class TensorplexServer(metaclass=_DelegateMethod):
+    EXCLUDE_METHODS = [
+        'start_server',
+        'register_normal_group',
+        'register_combined_group',
+        'register_indexed_group',
+    ]
     """
     https://github.com/tensorflow/tensorboard/issues/300
     Different folders with same run tag ("agent/1/reward")
@@ -251,15 +257,17 @@ class TensorplexServer(metaclass=_DelegateMethod):
             has_return_value=False
         ).run()
 
+    def get_proxy(self, client_id):
+        """
+        Must be called AFTER registering all the groups!
+        """
+        return LocalProxy(self, client_id,
+                          exclude_methods=self.EXCLUDE_METHODS)
+
 
 TensorplexClient = RemoteCall.make_client_class(
     TensorplexServer,
     new_cls_name='TensorplexClient',
     has_return_value=False,
-    exclude_methods=[
-        'start_server',
-        'register_normal_group',
-        'register_combined_group',
-        'register_indexed_group',
-    ],
+    exclude_methods=TensorplexServer.EXCLUDE_METHODS,
 )
