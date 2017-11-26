@@ -67,7 +67,7 @@ def run3():
         )
         plot(t, 1 * i)
 
-if 0:
+if 1:
     clear()
     with Timer():
         run0()
@@ -75,14 +75,14 @@ if 0:
         run2()
         run3()
 
-if 0:
+if 1:
     ts = [threading.Thread(target=eval('run'+str(i))) for i in range(4)]
     clear()
     with Timer():
         [t.start() for t in ts]
         [t.join() for t in ts]
 
-if 1:
+if 0:
     ts = [multiprocessing.Process(target=eval('run'+str(i))) for i in range(4)]
     clear()
     with Timer():

@@ -1,8 +1,9 @@
 import logging
 import os
 import inspect
-from .local_logger import Logger
-from .remote_call import RemoteCall, mkdir, LocalProxy
+from .logger import Logger
+from .remote_call import RemoteCall, mkdir
+from .local_proxy import LocalProxy
 
 
 class _DelegateMethod(type):

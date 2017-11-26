@@ -1,9 +1,10 @@
 import json
 import os
 import inspect
-from .remote_call import RemoteCall, mkdir, LocalProxy
+from .remote_call import RemoteCall, mkdir
 from tensorboardX import SummaryWriter
 from collections import namedtuple
+from .local_proxy import LocalProxy
 
 
 class _DelegateMethod(type):
