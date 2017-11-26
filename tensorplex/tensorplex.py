@@ -3,6 +3,7 @@ import os
 import inspect
 from .remote_call import RemoteCall, mkdir, LocalProxy
 from tensorboardX import SummaryWriter
+import multiprocessing
 from collections import namedtuple
 
 
@@ -21,22 +22,23 @@ class _DelegateMethod(type):
         ]
         for mname in method_names:
 
-            def _method(self, tag, *args, __name=mname, **kwargs):
+            def _method(self, tag, *args, _client_id_=None, __name=mname, **kwargs):
                 # access two properties: self._current_writer and _current_tag
+                current_tag, current_writer = self._get_client_info(_client_id_)
                 tag = tag.replace(':', '.').replace('#', '.')
-                if isinstance(self._current_tag, tuple):  # indexed group
-                    group, bin_name = self._current_tag
+                if isinstance(current_tag, tuple):  # indexed group
+                    group, bin_name = current_tag
                     if tag.startswith('.') or tag.startswith('/'):
                         tag = group + tag + '/' + bin_name
                     else:
                         tag = group + '/' + tag + '/' + bin_name
                 else:  # normal group
-                    group = self._current_tag
+                    group = current_tag
                     if tag.startswith('.') or tag.startswith('/'):
                         tag = group + tag
                     else:
                         tag = group + '/' + tag
-                getattr(self._current_writer, __name)(tag, *args, **kwargs )
+                getattr(current_writer, __name)(tag, *args, **kwargs )
 
             _method.__doc__ = inspect.getdoc(getattr(SummaryWriter, mname))
             attrs[mname] = _method
@@ -90,9 +92,7 @@ class TensorplexServer(metaclass=_DelegateMethod):
         self._combined_tag_to_bin_name = {}
 
         self._writers = {}  # subfolder_path: SummaryWriter instance
-        # following are used in the meta-class method delegation
-        self._current_tag = None
-        self._current_writer = None
+
 
     def register_normal_group(self, name):
         self.normal_groups.append(name)
@@ -172,7 +172,7 @@ class TensorplexServer(metaclass=_DelegateMethod):
             'returned bin_name {} must be a string'.format(bin_name)
         return bin_name
 
-    def _set_client_id(self, client_id):
+    def _get_client_info(self, client_id):
         """
         Client ID needs to be in the form of "<group>/<id>"
         For NumberedGroup, <id> must be an int, the group will be placed into bins
@@ -188,24 +188,24 @@ class TensorplexServer(metaclass=_DelegateMethod):
         group, ID = _parts
         if group in self.normal_groups:
             # normal group root tag is simply ID
-            self._current_tag = ID
-            self._current_writer = self._writers[group]
+            _current_tag = ID
+            _current_writer = self._writers[group]
         elif group in self.combined_groups:
             # combined group's tag is tuple ("group", "pre-defined bin name")
-            self._current_tag = (
+            _current_tag = (
                 group,
                 self._combined_bin_name(group, ID)
             )
-            self._current_writer = self._get_sub_writer(group, ID)
+            _current_writer = self._get_sub_writer(group, ID)
         elif group in self.indexed_groups:
             assert str.isdigit(ID), 'indexed group ID must be int'
             ID = int(ID)
             # indexed group's current tag is a tuple ("agent", "8-15")
-            self._current_tag = (
+            _current_tag = (
                 group,
                 self._index_bin_name(group, ID)
             )
-            self._current_writer = self._get_sub_writer(group, ID)
+            _current_writer = self._get_sub_writer(group, ID)
         else:
             all_groups = (
                 self.normal_groups
@@ -217,8 +217,9 @@ class TensorplexServer(metaclass=_DelegateMethod):
             else:
                 raise ValueError('Group "{}" not found. Available groups: {}'
                                  .format(group, all_groups))
+        return _current_tag, _current_writer
 
-    def add_scalars(self, tag_scalar_dict, global_step):
+    def add_scalars(self, tag_scalar_dict, global_step, _client_id_=None):
         """
         Tensorplex's add_scalars() is simply calling add_scalar() multiple times.
         It is NOT the same as `add_scalars()` in the original Tensorboard-pytorch
@@ -227,7 +228,8 @@ class TensorplexServer(metaclass=_DelegateMethod):
         http://tensorboard-pytorch.readthedocs.io/en/latest/_modules/tensorboardX/writer.html#SummaryWriter.add_scalars
         """
         for tag, value in tag_scalar_dict.items():
-            self.add_scalar(tag, value, global_step=global_step)
+            self.add_scalar(tag, value,
+                            global_step=global_step, _client_id_=_client_id_)
 
     def export_scalar_dict(self):
         """

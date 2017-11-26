@@ -73,6 +73,16 @@ class RemoteCall(object):
                  queue_name,
                  has_client_id,
                  has_return_value):
+        """
+
+        Args:
+            local_object:
+            host:
+            port:
+            queue_name:
+            has_client_id: True to add `_client_id_` kwarg to every method that accepts it
+            has_return_value:
+        """
         self._client = redis.StrictRedis(host=host, port=port)
         self._pipe = self._client.pipeline(transaction=False)
         self._obj = local_object
@@ -84,10 +94,6 @@ class RemoteCall(object):
             func = getattr(self._obj, fname)
             if callable(func) and not fname.startswith('_'):
                 self._methods[fname] = func
-        if self._has_client_id:
-            assert (hasattr(self._obj, '_set_client_id')
-                    and callable(getattr(self._obj, '_set_client_id'))), \
-                'object must have the special method _set_client_id()'
         self._check_flag_push = self._client.register_script(_LUA_CHECK_FLAG)
 
     def run(self):
@@ -109,9 +115,16 @@ class RemoteCall(object):
                 )
                 continue
             # execute the remote method TODO handle exception
+            method = self._methods[method_name]
             if self._has_client_id:
-                self._obj._set_client_id(client_id)
-            result = self._methods[method_name](*args, **kwargs)
+                try:
+                    # check if __client_id keyword arg is allowed
+                    inspect.signature(method).bind_partial(_client_id_=0)
+                    result = method(*args, _client_id_=client_id, **kwargs)
+                except TypeError:
+                    result = method(*args, **kwargs)
+            else:
+                result = method(*args, **kwargs)
             # check if we want to push the result
             if self._has_return_value:
                 self._check_flag_push(
@@ -212,9 +225,8 @@ class LocalProxy(object):
                                 __old_func=func,
                                 **kwargs):
                     __old_sig.bind(*args, **kwargs)  # check signature
-                    with _proxy_lock:
-                        instance._set_client_id(client_id)
-                        return __old_func(*args, **kwargs)
+                    instance._set_client_id(client_id)
+                    return __old_func(*args, **kwargs)
                 _new_method.__doc__ = inspect.getdoc(func)  # preserve docstring
                 setattr(self, fname, _new_method)
 
