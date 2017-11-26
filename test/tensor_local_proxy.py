@@ -3,9 +3,14 @@ Run Tensorplex completely locally, without Redis.
 Can be used with multiprocess/multithreading
 """
 import math
-from tensorplex import *
+import threading
+import multiprocessing
+from test.common import *
 
-os.system('rm -rf ~/Temp/loggerplex/*')
+
+def clear():
+    os.system('rm -rf ~/Temp/loggerplex/*')
+
 tplex = TensorplexServer('~/Temp/loggerplex')
 
 def get_eval_bin_name(tag):
@@ -34,28 +39,54 @@ def plot(writer, shift):
         writer.add_scalars({'yo': v1, ':yo': v2, ':yo.yo': v3}, i)
 
 
-for i in range(27):
-    t = tplex.get_proxy(
-        client_id='agent/'+str(i),
-    )
-    plot(t, -0.12 * i)
+def run0():
+    for i in range(27):
+        t = tplex.get_proxy(
+            client_id='agent/'+str(i),
+        )
+        plot(t, -0.12 * i)
 
-for i in range(5):
-    t = tplex.get_proxy(
-        client_id='individ/'+str(i),
-    )
-    plot(t, 0.2 * i)
+def run1():
+    for i in range(5):
+        t = tplex.get_proxy(
+            client_id='individ/'+str(i),
+        )
+        plot(t, 0.2 * i)
 
-for i, tag in enumerate(['lr', 'momentum', 'eps']):
-    t = tplex.get_proxy(
-        client_id='learner/'+tag,
-    )
-    plot(t, 0.1 * i)
+def run2():
+    for i, tag in enumerate(['lr', 'momentum', 'eps']):
+        t = tplex.get_proxy(
+            client_id='learner/'+tag,
+        )
+        plot(t, 0.1 * i)
 
-for i, tag in enumerate(['deterministic', 'stochastic-1', 'stochastic-2', 'exploratory']):
-    t = tplex.get_proxy(
-        client_id='eval/'+tag,
-    )
-    plot(t, 1 * i)
+def run3():
+    for i, tag in enumerate(['deterministic', 'stochastic-1', 'stochastic-2', 'exploratory']):
+        t = tplex.get_proxy(
+            client_id='eval/'+tag,
+        )
+        plot(t, 1 * i)
 
-t.export_json('~/Temp/loggerplex/scalars.json')
+if 0:
+    clear()
+    with Timer():
+        run0()
+        run1()
+        run2()
+        run3()
+
+if 0:
+    ts = [threading.Thread(target=eval('run'+str(i))) for i in range(4)]
+    clear()
+    with Timer():
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+
+if 1:
+    ts = [multiprocessing.Process(target=eval('run'+str(i))) for i in range(4)]
+    clear()
+    with Timer():
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+
+tplex.export_json('~/Temp/loggerplex/scalars.json')

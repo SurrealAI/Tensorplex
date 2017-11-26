@@ -3,6 +3,17 @@ import os, sys
 from tensorplex import *
 
 
+class Timer:
+    def __enter__(self):
+        self.start = time.time()
+        return self
+
+    def __exit__(self, *args):
+        self.end = time.time()
+        self.interval = self.end - self.start
+        print(self.interval)
+
+
 class MyObject(object):
     def __init__(self, x, y):
         self.x = x
