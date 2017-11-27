@@ -1,6 +1,7 @@
 import json
 import os
 from tensorplex.utils import mkdir
+from tensorplex.local_proxy import LocalProxy
 from tensorboardX import SummaryWriter
 from collections import namedtuple
 import queue
@@ -288,3 +289,10 @@ class Tensorplex(metaclass=_DelegateMethod):
             writerID = writerID.replace('/', '.')
             json_path = os.path.join(json_dir, writerID+'.json')
             queue.put(('export_json', None, (json_path,), {}))
+
+    def get_proxy(self, client_id):
+        return LocalProxy(self, client_id, exclude_methods=[
+            'register_normal_group',
+            'register_indexed_group',
+            'register_combined_group',
+        ])

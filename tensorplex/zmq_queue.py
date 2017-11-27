@@ -42,6 +42,7 @@ class ZmqQueueServer(object):
         if self.enqueue_thread is not None:
             raise RuntimeError('enqueue_thread already started')
         self.enqueue_thread = threading.Thread(target=self._run_enqueue)
+        self.enqueue_thread.daemon = True
         self.enqueue_thread.start()
         return self.enqueue_thread
 
@@ -90,6 +91,7 @@ class ZmqQueueClient(object):
         if self.batch_thread is not None:
             raise ValueError('batch_thread already running')
         self.batch_thread = threading.Thread(target=self._run_batch)
+        self.batch_thread.daemon = True
         self.batch_thread.start()
         return self.batch_thread
 

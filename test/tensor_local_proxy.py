@@ -6,12 +6,14 @@ import math
 import threading
 import multiprocessing
 from test.common import *
+from tensorplex.experimental import Tensorplex
+# from tensorplex.tensorplex import TensorplexServer as Tensorplex
 
 
 def clear():
     os.system('rm -rf ~/Temp/loggerplex/*')
 
-tplex = TensorplexServer('~/Temp/loggerplex')
+tplex = Tensorplex('~/Temp/loggerplex')
 
 def get_eval_bin_name(tag):
     if tag.startswith('stocha'):
@@ -89,4 +91,4 @@ if 0:
         [t.start() for t in ts]
         [t.join() for t in ts]
 
-tplex.export_json('~/Temp/loggerplex/scalars.json')
+tplex.export_json('json')

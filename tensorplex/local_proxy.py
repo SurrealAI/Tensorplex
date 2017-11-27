@@ -1,5 +1,6 @@
 import multiprocessing
 import inspect
+from .utils import iter_methods, test_bind_partial
 
 
 class LocalProxy(object):
@@ -14,7 +15,7 @@ class LocalProxy(object):
     def __init__(self, instance, client_id, exclude_methods=None):
         self._instance = instance
         # _instance.LOCK_ATTR is a singleton
-        if hasattr(instance, self.LOCK_ATTR):
+        if hasattr(instance, self.LOCK_ATTR):  # DEPRECATED
             _proxy_lock = getattr(instance, self.LOCK_ATTR)
             # protect against both thread and process
             assert isinstance(_proxy_lock, type(multiprocessing.Lock()))
@@ -24,21 +25,27 @@ class LocalProxy(object):
 
         if exclude_methods is None:
             exclude_methods = []
-        for fname in dir(instance):
-            func = getattr(instance, fname)
-            if (callable(func) and
-                    not fname.startswith('_') and
-                    not fname in exclude_methods):
-                # hijacks the member function
-                old_sig = inspect.signature(func)
+        for fname, func in iter_methods(instance, exclude=exclude_methods):
+            # hijacks the member function
+            old_sig = inspect.signature(func)
 
-                def _new_method(*args,
-                                __old_sig=old_sig,
-                                __old_func=func,
-                                **kwargs):
-                    __old_sig.bind(*args, **kwargs)  # check signature
-                    with _proxy_lock:
-                        instance._set_client_id(client_id)
-                        return __old_func(*args, **kwargs)
-                _new_method.__doc__ = inspect.getdoc(func)  # preserve docstring
-                setattr(self, fname, _new_method)
+            if test_bind_partial(func, _client_id_=0):
+                def _method(*args,
+                            _old_sig_=old_sig,
+                            _old_func_=func,
+                            **kwargs):
+                    # check signature correctness
+                    _old_sig_.bind(*args, _client_id_=0, **kwargs)
+                    # with _proxy_lock:  # DEPREC
+                    return _old_func_(*args, _client_id_=client_id, **kwargs)
+            else:
+                def _method(*args,
+                            _old_sig_=old_sig,
+                            _old_func_=func,
+                            **kwargs):
+                    _old_sig_.bind(*args, **kwargs)  # check signature
+                    # with _proxy_lock:  # DEPREC
+                    return _old_func_(*args, **kwargs)
+
+            _method.__doc__ = inspect.getdoc(func)  # preserve docstring
+            setattr(self, fname, _method)
