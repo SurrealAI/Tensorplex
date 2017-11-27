@@ -95,7 +95,6 @@ class ZmqQueueClient(object):
 
     def _run_batch(self):
         while True:
-            # print('CHECK', self._batch_buffer)
             if self._batch_buffer:
                 with self._batch_lock:
                     self._send(self._batch_buffer)

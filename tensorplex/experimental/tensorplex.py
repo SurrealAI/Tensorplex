@@ -1,13 +1,11 @@
 import json
 import os
-import inspect
 from tensorplex.utils import mkdir
 from tensorboardX import SummaryWriter
 from collections import namedtuple
 import queue
 import multiprocessing as mp
 import threading
-import Pyro4
 
 
 _DELEGATED_METHODS = [
@@ -84,7 +82,6 @@ class _DelegateMethod(type):
                 queue.put((_method_name_, client_tag, args, kwargs))
 
             _method.__name__ = mname
-            _method = Pyro4.expose(Pyro4.oneway(_method))
             # _method.__doc__ = inspect.getdoc(getattr(SummaryWriter, mname))
             attrs[mname] = _method
         return super().__new__(cls, name, bases, attrs)
@@ -268,8 +265,6 @@ class Tensorplex(metaclass=_DelegateMethod):
                 raise ValueError('Group "{}" not found. Available groups: {}'
                                  .format(group, all_groups))
 
-    @Pyro4.oneway
-    @Pyro4.expose
     def add_scalars(self, tag_scalar_dict, global_step, *, _client_id_):
         """
         Tensorplex's add_scalars() is simply calling add_scalar() multiple times.
@@ -282,8 +277,6 @@ class Tensorplex(metaclass=_DelegateMethod):
             self.add_scalar(tag, value,
                             global_step=global_step, _client_id_=_client_id_)
 
-    @Pyro4.oneway
-    @Pyro4.expose
     def export_json(self, json_dir):
         """
         Format: {writer_id : [[timestamp, step, value], ...] ...}

@@ -1,3 +1,9 @@
+"""
+DEPRECATED. Pyro4 mode is much, much slower than ZMQ mode.
+For reference only.
+
+Before running the server, first run `pyro4-ns -p 8008` in command line.
+"""
 import Pyro4
 from .tensorplex import Tensorplex
 from tensorplex.utils import iter_methods, test_bind_partial
@@ -5,6 +11,11 @@ import functools
 
 
 # Pyro4.config.SERIALIZER = 'pickle'
+
+
+# Add Pyro decorators
+for _fname, _func in iter_methods(Tensorplex):
+    setattr(Tensorplex, _fname, Pyro4.expose(Pyro4.oneway(_func)))
 
 
 def start_tensorplex_server(tensorplex, port, ns_port):

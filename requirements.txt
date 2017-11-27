@@ -2,3 +2,5 @@ redis
 easydict
 numpy
 tensorboardX
+Pyro4
+pyzmq
