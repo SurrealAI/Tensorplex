@@ -3,6 +3,13 @@ import math
 import traceback
 import io
 
+if 1:
+    from tensorplex.experimental import TensorplexClient
+else:
+    from tensorplex import TensorplexClient
+
+PORT = 8008
+
 
 def plot(writer, shift):
     x = math.pi / 200
@@ -16,36 +23,46 @@ def plot(writer, shift):
         writer.add_scalars({'yo': v1, ':yo': v2, ':yo.yo': v3}, i)
 
 
-for i in range(27):
-    t = TensorplexClient(
-        client_id='agent/'+str(i),
-        host='localhost',
-        port=6379,
-    )
-    plot(t, -0.12 * i)
+# for i, tag in enumerate(['lr']):
+#     t = TensorplexClient(
+#         client_id='learner/'+tag,
+#         host='localhost',
+#         port=PORT,
+#     )
+#     plot(t, 0.1 * i)
+# sys.exit(0)
 
-for i in range(5):
-    t = TensorplexClient(
-        client_id='individ/'+str(i),
-        host='localhost',
-        port=6379,
-    )
-    plot(t, 0.2 * i)
+with Timer():
+    for i in range(27):
+        t = TensorplexClient(
+            client_id='agent/'+str(i),
+            host='localhost',
+            port=PORT,
+        )
+        plot(t, -0.12 * i)
 
-for i, tag in enumerate(['lr', 'momentum', 'eps']):
-    t = TensorplexClient(
-        client_id='learner/'+tag,
-        host='localhost',
-        port=6379,
-    )
-    plot(t, 0.1 * i)
-
-for i, tag in enumerate(['deterministic', 'stochastic-1', 'stochastic-2', 'exploratory']):
-    t = TensorplexClient(
-        client_id='eval/'+tag,
-        host='localhost',
-        port=6379,
-    )
-    plot(t, 1 * i)
-
-t.export_json('~/Temp/loggerplex/scalars.json')
+    # for i in range(5):
+    #     t = TensorplexClient(
+    #         client_id='individ/'+str(i),
+    #         host='localhost',
+    #         port=PORT,
+    #     )
+    #     plot(t, 0.2 * i)
+    #
+    # for i, tag in enumerate(['lr', 'momentum', 'eps']):
+    #     t = TensorplexClient(
+    #         client_id='learner/'+tag,
+    #         host='localhost',
+    #         port=PORT,
+    #     )
+    #     plot(t, 0.1 * i)
+    #
+    # for i, tag in enumerate(['deterministic', 'stochastic-1', 'stochastic-2', 'exploratory']):
+    #     t = TensorplexClient(
+    #         client_id='eval/'+tag,
+    #         host='localhost',
+    #         port=PORT,
+    #     )
+    #     plot(t, 1 * i)
+    #
+    # t.export_json('json')
