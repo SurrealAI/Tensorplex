@@ -23,4 +23,4 @@ def get_eval_bin_name(tag):
 # StrictRedis().flushall()
 # tplex.start_server('localhost', 6379)
 
-start_tensorplex_server(tplex, 8007, 8008)
+start_tensorplex_server(tplex, 8008)

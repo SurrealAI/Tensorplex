@@ -41,28 +41,28 @@ with Timer():
         )
         plot(t, -0.12 * i)
 
-    # for i in range(5):
-    #     t = TensorplexClient(
-    #         client_id='individ/'+str(i),
-    #         host='localhost',
-    #         port=PORT,
-    #     )
-    #     plot(t, 0.2 * i)
-    #
-    # for i, tag in enumerate(['lr', 'momentum', 'eps']):
-    #     t = TensorplexClient(
-    #         client_id='learner/'+tag,
-    #         host='localhost',
-    #         port=PORT,
-    #     )
-    #     plot(t, 0.1 * i)
-    #
-    # for i, tag in enumerate(['deterministic', 'stochastic-1', 'stochastic-2', 'exploratory']):
-    #     t = TensorplexClient(
-    #         client_id='eval/'+tag,
-    #         host='localhost',
-    #         port=PORT,
-    #     )
-    #     plot(t, 1 * i)
-    #
-    # t.export_json('json')
+    for i in range(5):
+        t = TensorplexClient(
+            client_id='individ/'+str(i),
+            host='localhost',
+            port=PORT,
+        )
+        plot(t, 0.2 * i)
+
+    for i, tag in enumerate(['lr', 'momentum', 'eps']):
+        t = TensorplexClient(
+            client_id='learner/'+tag,
+            host='localhost',
+            port=PORT,
+        )
+        plot(t, 0.1 * i)
+
+    for i, tag in enumerate(['deterministic', 'stochastic-1', 'stochastic-2', 'exploratory']):
+        t = TensorplexClient(
+            client_id='eval/'+tag,
+            host='localhost',
+            port=PORT,
+        )
+        plot(t, 1 * i)
+
+    t.export_json('json')
