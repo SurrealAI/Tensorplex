@@ -5,15 +5,19 @@ import traceback
 import logging
 import inspect
 
-_LEVEL_NAMES = {}
-for i in range(1, 10):
-    _LEVEL_NAMES[logging.DEBUG + i] = 'DEBUG'+str(i)
-    _LEVEL_NAMES[logging.INFO + i] = 'INFO'+str(i)
+
+def _get_level_names():
+    names = {}
+    for i in range(1, 10):
+        names[logging.DEBUG + i] = 'DEBUG'+str(i)
+        names[logging.INFO + i] = 'INFO'+str(i)
+    # add to standard lib
+    for level, name in names.items():
+        setattr(logging, name, level)
+    return names
 
 
-# add to standard lib
-for _level, _name in _LEVEL_NAMES.items():
-    setattr(logging, _name, _level)
+_LEVEL_NAMES = _get_level_names()
 
 
 _LEVEL_NAMES.update({
@@ -31,6 +35,20 @@ def log_level_name(level):
 
 # hack stdlib function to enable better printing
 logging.getLevelName = log_level_name
+
+
+# http://stackoverflow.com/questions/12980512/custom-logger-class-and-correct-line-number-function-name-in-log
+# From python 3.5 source code:
+# _srcfile is used when walking the stack to check when we've got the first
+# caller stack frame, by skipping frames whose filename is that of this
+# module's source. It therefore should contain the filename of this module's
+# source file.
+# Ordinarily we would use __file__ for this, but frozen modules don't always
+# have __file__ set, for some reason (see Issue #21736). Thus, we get the
+# filename from a handy code object from a function defined in this module.
+# (There's no particular reason for picking log_level_name.)
+#
+_srcfile = os.path.normcase(log_level_name.__code__.co_filename)
 
 
 def _expand_args(arg1, arg2):
@@ -237,6 +255,7 @@ class Logger(metaclass=_NewFormatMeta):
                   level=None, 
                   file_name=None,
                   file_mode='a',
+                  format=None,
                   time_format=None,
                   show_level=False,
                   stream=None,
@@ -246,13 +265,13 @@ class Logger(metaclass=_NewFormatMeta):
           level: None to retain the original level of the logger
           file_name: None to print to console only
           file_mode: 'w' to override a file or 'a' to append
+          format: `{}` style logging format string, right after level name
           time_format:
             - `dhms`: %m/%d %H:%M:%S
             - `dhm`: %m/%d %H:%M
             - `hms`: %H:%M:%S
             - `hm`: %H:%M
-            - if contains '%', will be interpreted as a format string
-              https://docs.python.org/3/library/logging.html#logrecord-attributes
+            - if contains '%', will be interpreted as a time format string
             - None
           show_level: if True, display `INFO> ` before the message
           stream: 
@@ -260,16 +279,38 @@ class Logger(metaclass=_NewFormatMeta):
             - str: "out", "stdout", "err", or "stderr"
             - None: do not print to any stream
           reset_handlers: True to remove all old handlers
-        
+
+        Notes:
+            log format rules:
+            levelname> [format] ...your message...
+
+            If show_level is True, `levelname> ` will be the first
+            If format is None and time_format is None, nothing prints
+            If format is None and time_format specified, print time
+            If format specified, time_format will take effect only if
+                '{asctime}' is contained in the format.
+            E.g. if format is empty string, nothing will print even if
+            time_format is set.
+
+        References:
+        - for format string:
+            https://docs.python.org/3/library/logging.html#logrecord-attributes
+        - for time_format string:
+            https://docs.python.org/3/library/time.html#time.strftime
+
         Warning:
           always removes all previous handlers
         """
         if reset_handlers:
             self.remove_all_handlers()
         if level:
+            if isinstance(level, str):  # "INFO", "WARNING"
+                level = level.upper()
+                level = getattr(self, level)
             self.logger.setLevel(level)
-        self.add_stream_handler(stream, time_format, show_level)
-        self.add_file_handler(file_name, file_mode, time_format, show_level)
+        self.add_stream_handler(stream, format, time_format, show_level)
+        self.add_file_handler(file_name, file_mode,
+                              format, time_format, show_level)
         return self
     
     @classmethod
@@ -300,18 +341,25 @@ class Logger(metaclass=_NewFormatMeta):
             logger = logging.getLogger(logger)
         return cls(logger)
 
-    def _get_formatter(self,
-                       time_format=None,
-                       show_level=False):
-        levelname = '%(levelname)s> ' if show_level else ''
-        if time_format is None:
-            return logging.Formatter(levelname + u'%(message)s')
+    def _get_formatter(self, format, time_format, show_level):
+        levelname = '{levelname}> ' if show_level else ''
+        if format is None:
+            if time_format is not None:
+                fmt = '{asctime} '
+            else:
+                fmt = ''
         else:
-            return logging.Formatter('%(asctime)s '+levelname+u'%(message)s',
-                                      datefmt=self.get_datefmt(time_format))
+            fmt = format
+        return logging.Formatter(
+            fmt=fmt + levelname + '{message}',
+            datefmt=self.get_datefmt(time_format),
+            style='{'
+        )
     
-    def add_file_handler(self, file_name,
+    def add_file_handler(self,
+                         file_name,
                          file_mode='a',
+                         format=None,
                          time_format=None,
                          show_level=False):
         """
@@ -322,14 +370,16 @@ class Logger(metaclass=_NewFormatMeta):
         if not file_name:
             return
         file_name = os.path.expanduser(file_name)
-        formatter = self._get_formatter(time_format, show_level)
+        formatter = self._get_formatter(format, time_format, show_level)
         for name, mode in _expand_args(file_name, file_mode):
             handler = logging.FileHandler(name, mode)
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
         return self
 
-    def add_stream_handler(self, stream,
+    def add_stream_handler(self,
+                           stream,
+                           format=None,
                            time_format=None,
                            show_level=False):
         """
@@ -341,7 +391,7 @@ class Logger(metaclass=_NewFormatMeta):
         """
         if not stream:
             return
-        formatter = self._get_formatter(time_format, show_level)
+        formatter = self._get_formatter(format, time_format, show_level)
         for stream in _expand_arg(stream):
             if isinstance(stream, str):
                 if stream in ['out', 'stdout']:
@@ -375,6 +425,7 @@ class Logger(metaclass=_NewFormatMeta):
         Args:
           formatter: can be either of the following:
           - instance of logging.Formatter
+          - fmt string, note that the style is `{}`
           - tuple of fmt strings (fmt, datefmt), note that the style is `{}`
         
         References:
@@ -383,19 +434,18 @@ class Logger(metaclass=_NewFormatMeta):
         - for datefmt string:
             https://docs.python.org/3/library/time.html#time.strftime
         """
-        if isinstance(formatter, (list, tuple)):
+        if isinstance(formatter, str):
+            formatter = logging.Formatter(formatter, datefmt=None, style='{')
+        elif isinstance(formatter, (list, tuple)):
             assert len(formatter) == 2, 'formatter=(fmt, datefmt) strings'
             fmt, datefmt = formatter
             datefmt = self.get_datefmt(datefmt)
             formatter = logging.Formatter(fmt, datefmt, style='{')
         elif not isinstance(formatter, logging.Formatter):
-            raise TypeError('formatter must be either an instance of logging.Formatter'
-                            ' or a tuple of (fmt, datefmt) strings')
+            raise TypeError('formatter must be either an instance of '
+                    'logging.Formatter or a tuple of (fmt, datefmt) strings')
         for handler in self.logger.handlers:
             handler.setFormatter(formatter)
-
-    def _log(self, level, msg, **kwargs):
-        self.logger.log(level, msg, **kwargs)
 
     @staticmethod
     def all_loggers():
@@ -413,3 +463,59 @@ class Logger(metaclass=_NewFormatMeta):
         Check whether a logger exists
         """
         return name in Logger.all_loggers()
+
+    # ================================================
+    # copy stdlib logging source code here to ensure that line numbers
+    # and file locations are correct in the log message
+    # http://stackoverflow.com/questions/12980512/custom-logger-class-and-correct-line-number-function-name-in-log
+    # ================================================
+    def _findCaller(self, stack_info=False):
+        # Find the stack frame of the caller so that we can note the source
+        # file name, line number and function name.
+        f = logging.currentframe()
+        #On some versions of IronPython, currentframe() returns None if
+        #IronPython isn't run with -X:Frames.
+        if f is not None:
+            f = f.f_back
+        rv = "(unknown file)", 0, "(unknown function)", None
+        while hasattr(f, "f_code"):
+            co = f.f_code
+            filename = os.path.normcase(co.co_filename)
+            if filename == _srcfile:
+                f = f.f_back
+                continue
+            sinfo = None
+            if stack_info:
+                sio = io.StringIO()
+                sio.write('Stack (most recent call last):\n')
+                traceback.print_stack(f, file=sio)
+                sinfo = sio.getvalue()
+                if sinfo[-1] == '\n':
+                    sinfo = sinfo[:-1]
+                sio.close()
+            rv = (co.co_filename, f.f_lineno, co.co_name, sinfo)
+            break
+        return rv
+
+    def _log(self, level, msg, args=tuple(), exc_info=None, extra=None, stack_info=False):
+        # Low-level logging routine which creates a LogRecord and then calls
+        # all the handlers of this logger to handle the record.
+        sinfo = None
+        if _srcfile:
+            #IronPython doesn't track Python frames, so findCaller raises an
+            #exception on some versions of IronPython. We trap it here so that
+            #IronPython can use logging.
+            try:
+                fn, lno, func, sinfo = self._findCaller(stack_info)
+            except ValueError: # pragma: no cover
+                fn, lno, func = "(unknown file)", 0, "(unknown function)"
+        else: # pragma: no cover
+            fn, lno, func = "(unknown file)", 0, "(unknown function)"
+        if exc_info:
+            if isinstance(exc_info, BaseException):
+                exc_info = (type(exc_info), exc_info, exc_info.__traceback__)
+            elif not isinstance(exc_info, tuple):
+                exc_info = sys.exc_info()
+        record = self.logger.makeRecord(self.logger.name, level, fn, lno, msg, args,
+                                        exc_info, func, extra, sinfo)
+        self.logger.handle(record)

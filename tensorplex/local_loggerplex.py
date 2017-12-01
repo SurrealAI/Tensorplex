@@ -7,14 +7,20 @@ from .local_proxy import LocalProxy
 
 
 class Loggerplex(object):
-    def __init__(self, folder, overwrite=False, debug=False):
+    def __init__(self, folder,
+                 overwrite=False,
+                 level='info',
+                 format=None,
+                 time_format='hms'):
         self.log_files = {}
         self.folder = os.path.expanduser(folder)
         mkdir(self.folder)
         assert os.path.exists(self.folder), 'cannot create folder '+self.folder
         self._loggers = {}
         self._file_mode = 'w' if overwrite else 'a'
-        self._log_level = logging.DEBUG if debug else logging.INFO
+        self._log_level = level
+        self._format = format
+        self._time_format = time_format
 
     def _get_client_logger(self, client_id):
         if client_id not in self._loggers:
@@ -25,8 +31,10 @@ class Loggerplex(object):
                 level=self._log_level,
                 file_name=log_file,
                 file_mode=self._file_mode,
-                time_format='hms',
+                format=self._format,
+                time_format=self._time_format,
                 show_level=True,
+                stream=None,
                 reset_handlers=True
             )
             self._loggers[client_id] = _log

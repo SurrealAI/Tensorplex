@@ -2,9 +2,11 @@ from test.common import *
 from tensorplex import *
 
 
-logger = Loggerplex('~/Temp/loggerplex', overwrite=1, debug=1)
+logger = Loggerplex('~/Temp/loggerplex',
+                    overwrite=1,
+                    level='warning')
 
-client = 3
+client = 4
 
 logproxy = logger.proxy(
     client_id='agent'+str(client),

@@ -16,7 +16,7 @@ class LoggerplexClient(object):
     # avoid creating the Zmq socket over and over again
     _ZMQUEUE = {}
 
-    def __init__(self, *, client_id, host, port):
+    def __init__(self, client_id, *, host, port):
         self.zmqueue = self._get_client(host, port)
         self._client_id = client_id
 
