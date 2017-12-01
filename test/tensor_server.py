@@ -6,7 +6,7 @@ os.system('rm -rf ~/Temp/loggerplex/*')
 
 tplex = Tensorplex(
     '~/Temp/loggerplex',
-    max_processes=2,
+    max_processes=4,
 )
 
 def get_eval_bin_name(tag):

@@ -74,14 +74,11 @@ class _WriterGroup(object):
     """
     Each WriterGroup lives on a separate process
     """
-    def __init__(self, proc_id, queue, parallel_mode):
+    def __init__(self, proc_id, queue, parallel_cls):
         self._pool = {}  # writerID: _Writer instance
         self._proc_id = proc_id  # process ID, for debugging
         self._queue = queue
-        if parallel_mode == 'process':
-            self.ProcessCls = mp.Process
-        else:
-            self.ProcessCls = threading.Thread
+        self.ProcessCls = parallel_cls
 
     def _add_writer(self, writerID, root_folder, sub_folder):
         # print('newwriter', self._proc_id, writerID, root_folder, sub_folder)
@@ -110,13 +107,17 @@ class _WriterGroup(object):
 
 
 class _ProcessPool(object):
-    def __init__(self, root_folder, max_processes, parallel_mode):
+    def __init__(self, root_folder, max_processes):
         self._root_folder = root_folder
         self._occupancy = []  # writer count per process, for load balancing
         self._proc_queues = []
+        if max_processes == 0:
+            self._is_thread = True
+            max_processes = 1
+        else:
+            self._is_thread = False
         self._max_procs = max_processes
         self._writer_id_queue = {}
-        self._parallel_mode = parallel_mode
 
     def _select_process(self):
         "select the next vacant process, returns queue associated"
@@ -129,7 +130,7 @@ class _ProcessPool(object):
             _WriterGroup(
                 proc_id=len(self._occupancy)-1,
                 queue=q,
-                parallel_mode=self._parallel_mode
+                parallel_cls=threading.Thread if self._is_thread else mp.Process
             ).run()
             return q
         else:
@@ -192,16 +193,13 @@ class Tensorplex(object):
     For example, ':learning:rate/my/group/eps' is under
         "<client_id>.learning.rate" section.
     """
-    def __init__(self,
-                 folder,
-                 max_processes,
-                 parallel_mode='process'):
+    def __init__(self, root_folder, max_processes):
         """
         Args:
-            folder: tensorboard file root folder
-            parallel_mode: 'process' or 'thread'
+            root_folder: tensorboard file root folder
+            max_processes: 0 to use thread instead of process
         """
-        self.folder = os.path.expanduser(folder)
+        self.folder = os.path.expanduser(root_folder)
         mkdir(self.folder)
         assert os.path.exists(self.folder), 'cannot create folder '+self.folder
         self.normal_groups = []
@@ -209,12 +207,10 @@ class Tensorplex(object):
         self._indexed_bin_size = {}
         self.combined_groups = []
         self._combined_tag_to_bin_name = {}
-        assert parallel_mode in ['process', 'thread']
-        # TODO handle processes = 0
+
         self._process_pool = _ProcessPool(
-            root_folder=folder,
+            root_folder=root_folder,
             max_processes=max_processes,
-            parallel_mode=parallel_mode
         )
 
     def register_normal_group(self, name):
