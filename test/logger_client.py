@@ -9,6 +9,7 @@ logger = LoggerplexClient(
     host='localhost',
     port=6379,
 )
+print(dir(logger))
 
 logger.info('client', client)
 logger.info7('client', client)

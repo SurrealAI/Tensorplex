@@ -72,7 +72,7 @@ class LoggerplexServer(metaclass=_DelegateMethod):
         Must be called AFTER registering all the groups!
         """
         return LocalProxy(self, client_id,
-                          exclude_methods=self.EXCLUDE_METHODS)
+                          exclude=self.EXCLUDE_METHODS)
 
 
 def _make_loggerplex_client():

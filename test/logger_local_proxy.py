@@ -4,7 +4,7 @@ from tensorplex import *
 
 logger = Loggerplex('~/Temp/loggerplex', overwrite=1, debug=1)
 
-client = 4
+client = 3
 
 logproxy = logger.proxy(
     client_id='agent'+str(client),

@@ -4,9 +4,10 @@ import queue
 import threading
 
 from tensorboardX import SummaryWriter
-from tensorplex.local_proxy import LocalProxy
+from .local_proxy import LocalProxy
 
-from tensorplex.utils import mkdir
+from .utils import mkdir, delegate_methods
+
 
 _DELEGATED_METHODS = [
     'add_scalar',
@@ -66,33 +67,13 @@ def _run_worker_process(root_folder, sub_folder, queue):
         worker.process(queue)
 
 
-class _DelegateMethod(type):
-    """
-    All methods called on LoggerplexServer will be delegated to self._log
-    """
-    def __new__(cls, name, bases, attrs):
-        for mname in _DELEGATED_METHODS:
-
-            def _method(self,
-                        *args,
-                        _method_name_=mname,
-                        _client_id_,  # required arg
-                        **kwargs):
-                client_tag, queue = self._get_client_tag(_client_id_)
-                queue.put((_method_name_, client_tag, args, kwargs))
-
-            _method.__name__ = mname
-            # _method.__doc__ = inspect.getdoc(getattr(SummaryWriter, mname))
-            attrs[mname] = _method
-        return super().__new__(cls, name, bases, attrs)
-
-
-class Tensorplex(metaclass=_DelegateMethod):
-    EXCLUDE_METHODS = [
-        'start_server',
+class Tensorplex(object):
+    _EXCLUDE_METHODS = [
         'register_normal_group',
         'register_combined_group',
         'register_indexed_group',
+        'proxy',
+        'start_server',
     ]
     """
     https://github.com/tensorflow/tensorboard/issues/300
@@ -290,8 +271,22 @@ class Tensorplex(metaclass=_DelegateMethod):
             queue.put(('export_json', None, (json_path,), {}))
 
     def proxy(self, client_id):
-        return LocalProxy(self, client_id, exclude_methods=[
-            'register_normal_group',
-            'register_indexed_group',
-            'register_combined_group',
-        ])
+        return LocalProxy(self, client_id,
+                          exclude=self._EXCLUDE_METHODS)
+
+
+def _wrap_method(fname, old_method):
+    def _method(self, *args, _client_id_, **kwargs):
+        client_tag, queue = self._get_client_tag(_client_id_)
+        queue.put((fname, client_tag, args, kwargs))
+    return _method
+
+
+delegate_methods(
+    target_obj=Tensorplex,
+    src_obj=SummaryWriter,
+    wrapper=_wrap_method,
+    doc_signature=True,
+    include=_DELEGATED_METHODS,
+)
+

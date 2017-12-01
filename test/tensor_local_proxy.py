@@ -8,10 +8,15 @@ import multiprocessing
 from test.common import *
 
 
-def clear():
-    os.system('rm -rf ~/Temp/loggerplex/*')
-
+os.system('rm -rf ~/Temp/loggerplex/*')
 tplex = Tensorplex('~/Temp/loggerplex')
+
+
+if 1:  # show docs!
+    for fname, func in iter_methods(tplex):
+        print('='*20, fname, '='*20)
+        print(inspect.getdoc(func))
+
 
 def get_eval_bin_name(tag):
     if tag.startswith('stocha'):
@@ -67,26 +72,11 @@ def run3():
         )
         plot(t, 1 * i)
 
-if 1:
-    clear()
-    with Timer():
-        run0()
-        run1()
-        run2()
-        run3()
+with Timer():
+    run0()
+    run1()
+    run2()
+    run3()
 
-if 0:
-    ts = [threading.Thread(target=eval('run'+str(i))) for i in range(4)]
-    clear()
-    with Timer():
-        [t.start() for t in ts]
-        [t.join() for t in ts]
-
-if 0:
-    ts = [multiprocessing.Process(target=eval('run'+str(i))) for i in range(4)]
-    clear()
-    with Timer():
-        [t.start() for t in ts]
-        [t.join() for t in ts]
-
+time.sleep(30)
 tplex.export_json('json')

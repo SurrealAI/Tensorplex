@@ -2,31 +2,11 @@ import logging
 import os
 import inspect
 from .logger import Logger
-from .utils import mkdir
+from .utils import mkdir, delegate_methods
 from .local_proxy import LocalProxy
 
 
-class _DelegateMethod(type):
-    """
-    All methods called on LoggerplexServer will be delegated to self._log
-    """
-    def __new__(cls, name, bases, attrs):
-        method_names = ['debug', 'info', 'warning', 'error',
-                        'critical', 'exception', 'section']
-        # custom info/debug levels
-        method_names += ['debug'+str(i) for i in range(1, 10)]
-        method_names += ['info'+str(i) for i in range(1, 10)]
-
-        for mname in method_names:
-            def _method(self, *args, _client_id_, _name_=mname, **kwargs):
-                _log = self._get_client_logger(_client_id_)
-                getattr(_log, _name_)(*args, **kwargs)
-            _method.__doc__ = inspect.getdoc(getattr(Logger, mname))
-            attrs[mname] = _method
-        return super().__new__(cls, name, bases, attrs)
-
-
-class Loggerplex(metaclass=_DelegateMethod):
+class Loggerplex(object):
     def __init__(self, folder, overwrite=False, debug=False):
         self.log_files = {}
         self.folder = os.path.expanduser(folder)
@@ -56,5 +36,32 @@ class Loggerplex(metaclass=_DelegateMethod):
         """
         Must be called AFTER registering all the groups!
         """
-        return LocalProxy(self, client_id, exclude_methods=[])
+        return LocalProxy(self, client_id, exclude=[])
 
+
+def _wrap_method(fname, old_method):
+    def _method(self, *args, _client_id_, **kwargs):
+        _log = self._get_client_logger(_client_id_)
+        old_method(_log, *args, **kwargs)
+    return _method
+
+
+def _get_logger_methods():
+    method_names = ['debug', 'info', 'warning', 'error',
+                    'critical', 'exception', 'section']
+    # custom info/debug levels
+    method_names += ['debug'+str(i) for i in range(1, 10)]
+    method_names += ['info'+str(i) for i in range(1, 10)]
+    return method_names
+
+
+LOGGER_METHODS = _get_logger_methods()
+
+
+delegate_methods(
+    target_obj=Loggerplex,
+    src_obj=Logger,
+    wrapper=_wrap_method,
+    doc_signature=True,
+    include=LOGGER_METHODS,
+)

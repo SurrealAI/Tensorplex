@@ -12,25 +12,7 @@ def start_loggerplex_server(loggerplex, port):
         tplex_method(*args, _client_id_=client_id, **kwargs)
 
 
-class _DelegateMethod(type):
-    """
-    All methods called on LoggerplexServer will be delegated to self._log
-    """
-    def __new__(cls, name, bases, attrs):
-        for fname, func in iter_methods(Loggerplex):
-            def _method(self, *args, _method_name_=fname, **kwargs):
-                self.zmqueue.enqueue(
-                    (_method_name_, self._client_id, args, kwargs)
-                )
-            # special case
-            if fname == 'exception':
-                fname = '_exception'  # overriden in LoggerplexClient
-            _method.__name__ = fname
-            attrs[fname] = _method
-        return super().__new__(cls, name, bases, attrs)
-
-
-class LoggerplexClient(metaclass=_DelegateMethod):
+class LoggerplexClient(object):
     # avoid creating the Zmq socket over and over again
     _ZMQUEUE = {}
 
@@ -53,6 +35,32 @@ class LoggerplexClient(metaclass=_DelegateMethod):
         )
         self._ZMQUEUE[host, port] = zmqueue
         return zmqueue
+
+
+def _method_wrapper(fname, old_method):
+    # special case
+    if fname == 'exception':
+        def _method(self, *args, exc, **kwargs):
+            assert isinstance(exc, Exception)
+            exc = Logger.exception2str(exc)
+            kwargs['exc'] = exc
+            self.zmqueue.enqueue(
+                ('exception', self._client_id, args, kwargs)
+            )
+    else:
+        def _method(self, *args, **kwargs):
+            self.zmqueue.enqueue(
+                (fname, self._client_id, args, kwargs)
+            )
+    return _method
+
+
+delegate_methods(
+    target_obj=LoggerplexClient,
+    src_obj=Loggerplex,
+    wrapper=_method_wrapper,
+    doc_signature=False
+)
 
 
 Loggerplex.start_server = start_loggerplex_server

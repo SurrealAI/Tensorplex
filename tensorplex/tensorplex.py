@@ -14,29 +14,7 @@ def start_tensorplex_server(tensorplex, port):
             tplex_method(*args, _client_id_=client_id, **kwargs)
 
 
-class _DelegateMethod(type):
-    """
-    All methods called on LoggerplexServer will be delegated to self._log
-    """
-    def __new__(cls, name, bases, attrs):
-        for fname, func in iter_methods(Tensorplex):
-            # if the method accepts _client_id_
-            if test_bind_partial(func, _client_id_=0):
-                def _method(self, *args, _method_name_=fname, **kwargs):
-                    self.zmqueue.enqueue(
-                        (_method_name_, self._client_id, args, kwargs)
-                    )
-            else:
-                def _method(self, *args, _method_name_=fname, **kwargs):
-                    self.zmqueue.enqueue(
-                        (_method_name_, None, args, kwargs)
-                    )
-            _method.__name__ = fname
-            attrs[fname] = _method
-        return super().__new__(cls, name, bases, attrs)
-
-
-class TensorplexClient(metaclass=_DelegateMethod):
+class TensorplexClient(object):
     # avoid creating the Zmq socket over and over again
     _ZMQUEUE = {}
 
@@ -54,6 +32,29 @@ class TensorplexClient(metaclass=_DelegateMethod):
         )
         self._ZMQUEUE[host, port] = zmqueue
         return zmqueue
+
+
+def _wrap_method(fname, old_method):
+    if test_bind_partial(old_method, _client_id_=0):
+        def _method(self, *args, **kwargs):
+            self.zmqueue.enqueue(
+                (fname, self._client_id, args, kwargs)
+            )
+    else:
+        def _method(self, *args, **kwargs):
+            self.zmqueue.enqueue(
+                (fname, None, args, kwargs)
+            )
+    return _method
+
+
+delegate_methods(
+    target_obj=TensorplexClient,
+    src_obj=Tensorplex,
+    wrapper=_wrap_method,
+    doc_signature=False,
+    exclude=Tensorplex._EXCLUDE_METHODS
+)
 
 
 Tensorplex.start_server = start_tensorplex_server

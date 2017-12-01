@@ -3,11 +3,6 @@ import math
 import traceback
 import io
 
-if 1:
-    from tensorplex.experimental import TensorplexClient
-else:
-    from tensorplex import TensorplexClient
-
 PORT = 8008
 
 

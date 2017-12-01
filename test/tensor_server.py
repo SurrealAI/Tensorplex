@@ -1,6 +1,5 @@
 from redis import StrictRedis
 from test.common import *
-from tensorplex.experimental import *
 
 os.system('rm -rf ~/Temp/loggerplex/*')
 
@@ -21,4 +20,4 @@ def get_eval_bin_name(tag):
  )
 
 # start_tensorplex_server(tplex, 8007, 8008)  # for Pyro
-start_tensorplex_server(tplex, 8008)  # for Zmq
+tplex.start_server(8008)  # for Zmq
