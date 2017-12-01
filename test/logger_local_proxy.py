@@ -4,7 +4,7 @@ from tensorplex import *
 
 logger = Loggerplex('~/Temp/loggerplex',
                     overwrite=1,
-                    level='warning')
+                    level='debug3')
 
 client = 4
 
@@ -20,8 +20,8 @@ try:
 except Exception as e:
     logproxy.exception('exc', client, 'yo', exc=e)
 logproxy.section('yoyoyoo', sep='%')
-logproxy.critical('Client format {:0>5d} - {:?<9}', client * 100, 'foo')
-logproxy.debug5('debugger {:0>5d} - {:?<9}', 10 + client, 'yo')
+logproxy.criticalfmt('Client format {:0>5d} - {:?<9}', client * 100, 'foo')
+logproxy.debug5fmt('debugger {:0>5d} - {:?<9}', 10 + client, 'yo')
 
 print(inspect.getdoc(logproxy.info7))
 print(inspect.getdoc(logproxy.debug3))

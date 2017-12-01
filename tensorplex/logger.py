@@ -75,35 +75,78 @@ def _expand_arg(arg):
         return [arg]
 
 
+def _process_msg(*args, **kwargs):
+    # if 'sep' is provided, we will use the custom separator instead
+    sep = kwargs.pop('sep', ' ')
+    # e.g. "{}, {}, {}" if sep = ", "
+    msg = sep.join([u'{}'] * len(args)).format(*args)
+    return msg, kwargs
+
+
+def _process_msg_fmt(msg, *args, **kwargs):
+    fmt_kwargs = {}
+    for key, value in kwargs.copy().items():
+        if not key in ['exc_info', 'stack_info', 'extra']:
+            fmt_kwargs[key] = value
+            # must remove unsupported keyword for internal args
+            kwargs.pop(key)
+    msg = msg.format(*args, **fmt_kwargs)
+    return msg, kwargs
+
+
 class _NewFormatMeta(type):
     def __new__(cls, cls_name, bases, attrs):
         # generate standard methods like logger.warning(...)
-        def _gen_std_levels(name):
-            def _method(self, msg, *args, **kwargs):
+        def _gen_std_levels(name, is_fmt):
+            if is_fmt:
+                _process = _process_msg_fmt
+            else:
+                _process = _process_msg
+
+            def _method(self, *args, **kwargs):
                 # e.g. logging.DEBUG
                 level = getattr(logging, name.upper())
                 if self.logger.isEnabledFor(level):
-                    msg, kwargs = self._process_msg(msg, *args, **kwargs)
+                    msg, kwargs = _process(*args, **kwargs)
                     self._log(level, msg, **kwargs)
+
             _method.__doc__ = inspect.getdoc(getattr(logging.Logger, name))
             return _method
-        
+
+        def _gen_section(name):
+            def _method(self, *msg, sep='=', repeat=20, **kwargs):
+                # e.g. logging.DEBUG
+                level = getattr(logging, name.upper())
+                self.section(*msg,
+                             level=level, sep=sep, repeat=repeat, **kwargs)
+            _method.__doc__ = inspect.getdoc(getattr(logging.Logger, name))
+            return _method
+
         for name in ['debug', 'info', 'warning', 'error', 'critical']:
-            attrs[name] = _gen_std_levels(name)
+            attrs[name] = _gen_std_levels(name, False)
+            attrs[name+'fmt'] = _gen_std_levels(name, True)
+            attrs[name+'section'] = _gen_section(name)
 
         # generate logger.info3(...) and logger.debug8(...)
-        def _gen_custom_levels(level):
+        def _gen_custom_levels(level, is_fmt):
             def _method(self, msg, *args, **kwargs):
-                return self.log(level, msg, *args, **kwargs)
+                if is_fmt:
+                    return self.logfmt(level, msg, *args, **kwargs)
+                else:
+                    return self.log(level, msg, *args, **kwargs)
             _method.__doc__ = "custom logging level "+str(level)
             return _method
 
         for level in range(1, 10):
             attrs['info{}'.format(level)] = \
-                _gen_custom_levels(logging.INFO + level)
+                _gen_custom_levels(logging.INFO + level, False)
+            attrs['info{}fmt'.format(level)] = \
+                _gen_custom_levels(logging.INFO + level, True)
             attrs['debug{}'.format(level)] = \
-                _gen_custom_levels(logging.DEBUG + level)
-        
+                _gen_custom_levels(logging.DEBUG + level, False)
+            attrs['debug{}fmt'.format(level)] = \
+                _gen_custom_levels(logging.DEBUG + level, True)
+
         for level, name in _LEVEL_NAMES.items():
             attrs[name] = level
         return super().__new__(cls, cls_name, bases, attrs)
@@ -132,15 +175,15 @@ class Logger(metaclass=_NewFormatMeta):
     """
     Example: 
     
-    # print out all logger fields
+    # print out all format attributes
     fmt_string = ''
-    for s in LoggerPro.log_fields:
+    for s in LoggerPro.FORMAT_ATTRS:
         fmt_string += '{0}={{{0}}}\n'.format(s)
     print(fmt_string)
     log.set_formatter((fmt_string, None))
     log.info('HELLO', 'WORLD!')
     """
-    log_fields = ['pathname', 'filename', 'lineno', 'funcName', 'module',
+    FORMAT_ATTRS = ['pathname', 'filename', 'lineno', 'funcName', 'module',
                   'process', 'processName', 'thread', 'threadName',
                   'created', 'relativeCreated', 'msecs',
                   'levelname', 'levelno', 'asctime', 'message']
@@ -179,7 +222,7 @@ class Logger(metaclass=_NewFormatMeta):
             Only Python3 supports exception.__traceback__
         """
         if self.logger.isEnabledFor(logging.ERROR):
-            msg, kwargs = self._process_msg(msg, *args, **kwargs)
+            msg, kwargs = _process_msg(msg, *args, **kwargs)
             msg += '\n'
             if isinstance(exc, str):  # see LoggerplexClient
                 msg += exc
@@ -192,7 +235,16 @@ class Logger(metaclass=_NewFormatMeta):
         Log with user-defined level, e.g. INFO_V0 to INFO_V5
         """
         if self.logger.isEnabledFor(level):
-            msg, kwargs = self._process_msg(msg, *args, **kwargs)
+            msg, kwargs = _process_msg(msg, *args, **kwargs)
+            # self.logger.log(level, msg, **kwargs)
+            self._log(level, msg, **kwargs)
+
+    def logfmt(self, level, msg, *args, **kwargs):
+        """
+        Log with user-defined level, e.g. INFO_V0 to INFO_V5
+        """
+        if self.logger.isEnabledFor(level):
+            msg, kwargs = _process_msg_fmt(msg, *args, **kwargs)
             # self.logger.log(level, msg, **kwargs)
             self._log(level, msg, **kwargs)
 
@@ -217,35 +269,13 @@ class Logger(metaclass=_NewFormatMeta):
                 args = tuple()
             else:
                 msg, *args = msg
-            msg, _ = self._process_msg(msg, *args, **kwargs)
+            msg, _ = _process_msg(msg, *args, **kwargs)
             msg = u'{sep}{space}{msg}{space}{sep}'.format(
                 sep=sep*(repeat//2),
                 msg=msg,
                 space=' ' if msg else ''
             )
             self._log(level, msg)
-
-    @staticmethod
-    def _process_msg(msg, *args, **kwargs):
-        if (isinstance(msg, str) and
-                '{' in msg and '}' in msg and
-                not kwargs.get('disable_format', False)):
-            fmt_kwargs = {}
-            for key, value in kwargs.copy().items():
-                if not key in ['exc_info', 'stack_info', 'extra']:
-                    fmt_kwargs[key] = value
-                    # must remove unsupported keyword for internal args
-                    kwargs.pop(key)
-            msg = msg.format(*args, **fmt_kwargs)
-        else:
-            # if `msg` isn't a format string, treat it as a normal print arg
-            args = (msg,) + args
-            # if 'sep' is provided, we will use the custom separator instead
-            sep = kwargs.pop('sep', ' ')
-            kwargs.pop('disable_format', None)
-            # e.g. "{}, {}, {}" if sep = ", "
-            msg = sep.join([u'{}'] * len(args)).format(*args)
-        return msg, kwargs
 
     def remove_all_handlers(self):
         for handle in self.logger.handlers:
@@ -405,7 +435,7 @@ class Logger(metaclass=_NewFormatMeta):
             self.logger.addHandler(handler)
         return self
     
-    def get_datefmt(self, datefmt):
+    def get_datefmt(self, time_format):
         """
         Alias for common date formats
         """
@@ -415,7 +445,7 @@ class Logger(metaclass=_NewFormatMeta):
                 'dhm': '%m-%d %H:%M',
                 'dhms':'%m-%d %H:%M:%S', 
                 'hms': '%H:%M:%S', 
-                'hm': '%H:%M'}.get(datefmt, datefmt)
+                'hm': '%H:%M'}.get(time_format, time_format)
 
     def set_formatter(self, formatter):
         """

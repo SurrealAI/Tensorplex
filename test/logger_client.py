@@ -19,8 +19,8 @@ try:
 except Exception as e:
     logger.exception('myexc', client, 'yo', exc=e)
 logger.section('yoyoyoo', sep='%')
-logger.critical('Client format {:0>5d} - {:?<9}', client*100, 'foo')
-logger.debug5('debugger {:0>5d} - {:?<9}', 10+client, 'yo')
+logger.criticalfmt('Client format {:0>5d} - {:?<9}', client*100, 'foo')
+logger.debug5fmt('debugger {:0>5d} - {:?<9}', 10+client, 'yo')
 
 print(inspect.getdoc(logger.info7))
 print(inspect.getdoc(logger.debug3))

@@ -11,7 +11,8 @@ class Loggerplex(object):
                  overwrite=False,
                  level='info',
                  format=None,
-                 time_format='hms'):
+                 time_format='hms',
+                 show_level=True):
         self.log_files = {}
         self.folder = os.path.expanduser(folder)
         mkdir(self.folder)
@@ -21,6 +22,7 @@ class Loggerplex(object):
         self._log_level = level
         self._format = format
         self._time_format = time_format
+        self._show_level = show_level
 
     def _get_client_logger(self, client_id):
         if client_id not in self._loggers:
@@ -33,7 +35,7 @@ class Loggerplex(object):
                 file_mode=self._file_mode,
                 format=self._format,
                 time_format=self._time_format,
-                show_level=True,
+                show_level=self._show_level,
                 stream=None,
                 reset_handlers=True
             )
@@ -54,22 +56,12 @@ def _wrap_method(fname, old_method):
     return _method
 
 
-def _get_logger_methods():
-    method_names = ['debug', 'info', 'warning', 'error',
-                    'critical', 'exception', 'section']
-    # custom info/debug levels
-    method_names += ['debug'+str(i) for i in range(1, 10)]
-    method_names += ['info'+str(i) for i in range(1, 10)]
-    return method_names
-
-
-LOGGER_METHODS = _get_logger_methods()
-
-
 delegate_methods(
     target_obj=Loggerplex,
     src_obj=Logger,
     wrapper=_wrap_method,
     doc_signature=True,
-    include=LOGGER_METHODS,
+    exclude=['configure', 'get_logger', 'wrap_logger',
+             'remove_all_handlers', 'add_stream_handler', 'add_file_handler',
+             'all_loggers', 'set_formatter', 'get_datefmt', 'exists'],
 )
