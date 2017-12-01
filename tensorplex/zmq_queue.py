@@ -73,6 +73,8 @@ class ZmqQueueClient(object):
         context = zmq.Context()
         self.socket = context.socket(zmq.PUSH)
         self.socket.set_hwm(100)
+        if host == 'localhost':
+            host = '127.0.0.1'
         self.socket.connect("tcp://{}:{}".format(host, port))
         self._use_pickle = use_pickle
         self._batch_interval = batch_interval
@@ -90,8 +92,8 @@ class ZmqQueueClient(object):
     def start_batch_thread(self):
         if self.batch_thread is not None:
             raise ValueError('batch_thread already running')
+        # batch thread should not be daemon, otherwise won't flush at sys exit
         self.batch_thread = threading.Thread(target=self._run_batch)
-        self.batch_thread.daemon = True
         self.batch_thread.start()
         return self.batch_thread
 

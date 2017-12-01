@@ -1,10 +1,15 @@
-import logging
-import os
-import inspect
+from .utils import *
+from .zmq_queue import *
+from .local_loggerplex import Loggerplex
 from .logger import Logger
-from .remote_call import RemoteCall
-from .utils import mkdir
-from .local_proxy import LocalProxy
+
+
+def start_loggerplex_server(loggerplex, port):
+    q = ZmqQueueServer(port=port, is_batched=True)
+    while True:
+        method_name, client_id, args, kwargs = q.dequeue()
+        tplex_method = getattr(loggerplex, method_name)
+        tplex_method(*args, _client_id_=client_id, **kwargs)
 
 
 class _DelegateMethod(type):
@@ -12,84 +17,43 @@ class _DelegateMethod(type):
     All methods called on LoggerplexServer will be delegated to self._log
     """
     def __new__(cls, name, bases, attrs):
-        method_names = ['debug', 'info', 'warning', 'error',
-                        'critical', 'exception', 'section']
-        # custom info/debug levels
-        method_names += ['debug'+str(i) for i in range(1, 10)]
-        method_names += ['info'+str(i) for i in range(1, 10)]
-
-        for mname in method_names:
-            def _method(self, *args, __name=mname, **kwargs):
-                getattr(self._log, __name)(*args, **kwargs)
-            _method.__doc__ = inspect.getdoc(getattr(Logger, mname))
-            attrs[mname] = _method
+        for fname, func in iter_methods(Loggerplex):
+            def _method(self, *args, _method_name_=fname, **kwargs):
+                self.zmqueue.enqueue(
+                    (_method_name_, self._client_id, args, kwargs)
+                )
+            # special case
+            if fname == 'exception':
+                fname = '_exception'  # overriden in LoggerplexClient
+            _method.__name__ = fname
+            attrs[fname] = _method
         return super().__new__(cls, name, bases, attrs)
 
 
-class LoggerplexServer(metaclass=_DelegateMethod):
-    EXCLUDE_METHODS = ['start_server']
+class LoggerplexClient(metaclass=_DelegateMethod):
+    # avoid creating the Zmq socket over and over again
+    _ZMQUEUE = {}
 
-    def __init__(self, folder, overwrite=False, debug=False):
-        self.log_files = {}
-        self.folder = os.path.expanduser(folder)
-        mkdir(self.folder)
-        assert os.path.exists(self.folder), 'cannot create folder '+self.folder
-        self._loggers = {}
-        self._log = None  # current logger
-        self._file_mode = 'w' if overwrite else 'a'
-        self._log_level = logging.DEBUG if debug else logging.INFO
+    def __init__(self, *, client_id, host, port):
+        self.zmqueue = self._get_client(host, port)
+        self._client_id = client_id
 
-    def _set_client_id(self, client_id):
-        if client_id in self._loggers:
-            self._log = self._loggers[client_id]
-        else:
-            log_file = os.path.join(self.folder, client_id + '.log')
-            self.log_files[client_id] = log_file
-            self._log = Logger.get_logger(
-                client_id,
-                level=self._log_level,
-                file_name=log_file,
-                file_mode=self._file_mode,
-                time_format='hms',
-                show_level=True,
-                reset_handlers=True
-            )
-            self._loggers[client_id] = self._log
-
-    def start_server(self, host, port):
-        RemoteCall(
-            self,
-            host=host,
-            port=port,
-            queue_name=self.__class__.__name__,
-            has_client_id=True,
-            has_return_value=False
-        ).run()
-
-    def get_proxy(self, client_id):
-        """
-        Must be called AFTER registering all the groups!
-        """
-        return LocalProxy(self, client_id,
-                          exclude_methods=self.EXCLUDE_METHODS)
-
-
-def _make_loggerplex_client():
-    LoggerplexClient = RemoteCall.make_client_class(
-        LoggerplexServer,
-        new_cls_name='LoggerplexClient',
-        has_return_value=False,
-        exclude_methods=LoggerplexServer.EXCLUDE_METHODS,
-    )
-    _old_exception_method = LoggerplexClient.exception
-
-    def _new_exception_method(self, *args, exc, **kwargs):
+    def exception(self, *args, exc, **kwargs):
         "stringify the traceback before sending over network"
         exc = Logger.exception2str(exc)
-        _old_exception_method(self, *args, exc=exc, **kwargs)
+        self._exception(*args, exc=exc, **kwargs)
 
-    LoggerplexClient.exception = _new_exception_method
-    return LoggerplexClient
+    def _get_client(self, host, port):
+        if (host, port) in self._ZMQUEUE:
+            return self._ZMQUEUE[host, port]
+        zmqueue = ZmqQueueClient(
+            host=host,
+            port=port,
+            batch_interval=0.2,
+        )
+        self._ZMQUEUE[host, port] = zmqueue
+        return zmqueue
 
 
-LoggerplexClient = _make_loggerplex_client()
+Loggerplex.start_server = start_loggerplex_server
+

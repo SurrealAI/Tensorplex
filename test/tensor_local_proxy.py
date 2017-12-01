@@ -6,8 +6,6 @@ import math
 import threading
 import multiprocessing
 from test.common import *
-from tensorplex.experimental import Tensorplex
-# from tensorplex.tensorplex import TensorplexServer as Tensorplex
 
 
 def clear():
@@ -43,28 +41,28 @@ def plot(writer, shift):
 
 def run0():
     for i in range(27):
-        t = tplex.get_proxy(
+        t = tplex.proxy(
             client_id='agent/'+str(i),
         )
         plot(t, -0.12 * i)
 
 def run1():
     for i in range(5):
-        t = tplex.get_proxy(
+        t = tplex.proxy(
             client_id='individ/'+str(i),
         )
         plot(t, 0.2 * i)
 
 def run2():
     for i, tag in enumerate(['lr', 'momentum', 'eps']):
-        t = tplex.get_proxy(
+        t = tplex.proxy(
             client_id='learner/'+tag,
         )
         plot(t, 0.1 * i)
 
 def run3():
     for i, tag in enumerate(['deterministic', 'stochastic-1', 'stochastic-2', 'exploratory']):
-        t = tplex.get_proxy(
+        t = tplex.proxy(
             client_id='eval/'+tag,
         )
         plot(t, 1 * i)

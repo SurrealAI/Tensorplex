@@ -1,9 +1,10 @@
-import os
-import sys
-import redis
 import inspect
 import pickle
-from .utils import random_string
+import sys
+
+import redis
+
+from tensorplex.utils import random_string
 
 
 def _flag(call_hash):

@@ -35,3 +35,24 @@ def test_bind_partial(func, *args, **kwargs):
         return True
     except TypeError:
         return False
+
+
+def delegate_methods(cls,
+                     transformer,
+                     doc_signature=False,
+                     exclude_methods=None):
+    """
+    Args:
+        cls: class to be transformed
+        transformer: takes an old method and returns the new one (with `self`)
+        doc_signature: if True, prepend the signature of the old func to docstring
+        exclude_methods:
+    """
+    assert callable(transformer)
+    for fname, func in iter_methods(cls):
+        new_func = transformer(func)
+        new_func.__name__ = func.__name__
+        old_doc = inspect.getdoc(func)
+        if doc_signature:
+            pass
+

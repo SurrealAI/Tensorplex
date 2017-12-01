@@ -1,70 +1,12 @@
+import inspect
 import json
 import os
-from tensorplex.utils import mkdir
-from tensorplex.local_proxy import LocalProxy
+
 from tensorboardX import SummaryWriter
-from collections import namedtuple
-import queue
-import multiprocessing as mp
-import threading
 
-
-_DELEGATED_METHODS = [
-    'add_scalar',
-    'add_audio',
-    'add_embedding',
-    'add_histogram',
-    'add_image',
-    'add_text'
-]
-
-
-class _TensorplexWorker(object):
-    def __init__(self, root_folder, sub_folder):
-        # print('Launch new process', root_folder, sub_folder)
-        self.folder = os.path.expanduser(os.path.join(root_folder, sub_folder))
-        mkdir(self.folder)
-        assert os.path.exists(self.folder), 'cannot create folder '+self.folder
-        self.writer = SummaryWriter(self.folder)
-
-    def _delegate(self, tag, *args, _client_tag_, _method_name_, **kwargs):
-        "delegate to tensorboard-pytorch methods"
-        tag = tag.replace(':', '.').replace('#', '.')
-        if isinstance(_client_tag_, tuple):  # indexed group
-            group, bin_name = _client_tag_
-            if tag.startswith('.') or tag.startswith('/'):
-                tag = group + tag + '/' + bin_name
-            else:
-                tag = group + '/' + tag + '/' + bin_name
-        else:  # normal group
-            group = _client_tag_
-            if tag.startswith('.') or tag.startswith('/'):
-                tag = group + tag
-            else:
-                tag = group + '/' + tag
-        getattr(self.writer, _method_name_)(tag, *args, **kwargs)
-
-    def export_json(self, json_path):
-        self.writer.export_scalars_to_json(json_path)
-
-    def process(self, queue):
-        method_name, client_tag, args, kwargs = queue.get()
-        # print('queue:', method_name, args, kwargs, '--', self.folder[-10:])
-        if method_name == 'export_json':
-            self.export_json(*args, **kwargs)
-        else:
-            self._delegate(
-                *args,
-                _method_name_=method_name,
-                _client_tag_=client_tag,
-                **kwargs
-            )
-
-
-def _run_worker_process(root_folder, sub_folder, queue):
-    worker = _TensorplexWorker(root_folder, sub_folder)
-    while True:
-        worker.process(queue)
+from tensorplex.local_proxy import LocalProxy
+from tensorplex.utils import mkdir
+from .remote_call import RemoteCall
 
 
 class _DelegateMethod(type):
@@ -72,23 +14,39 @@ class _DelegateMethod(type):
     All methods called on LoggerplexServer will be delegated to self._log
     """
     def __new__(cls, name, bases, attrs):
-        for mname in _DELEGATED_METHODS:
+        method_names = [
+            'add_scalar',
+            'add_audio',
+            'add_embedding',
+            'add_histogram',
+            'add_image',
+            'add_text'
+        ]
+        for mname in method_names:
 
-            def _method(self,
-                        *args,
-                        _method_name_=mname,
-                        _client_id_,  # required arg
-                        **kwargs):
-                client_tag, queue = self._get_client_tag(_client_id_)
-                queue.put((_method_name_, client_tag, args, kwargs))
+            def _method(self, tag, *args, __name=mname, **kwargs):
+                # access two properties: self._current_writer and _current_tag
+                tag = tag.replace(':', '.').replace('#', '.')
+                if isinstance(self._current_tag, tuple):  # indexed group
+                    group, bin_name = self._current_tag
+                    if tag.startswith('.') or tag.startswith('/'):
+                        tag = group + tag + '/' + bin_name
+                    else:
+                        tag = group + '/' + tag + '/' + bin_name
+                else:  # normal group
+                    group = self._current_tag
+                    if tag.startswith('.') or tag.startswith('/'):
+                        tag = group + tag
+                    else:
+                        tag = group + '/' + tag
+                getattr(self._current_writer, __name)(tag, *args, **kwargs )
 
-            _method.__name__ = mname
-            # _method.__doc__ = inspect.getdoc(getattr(SummaryWriter, mname))
+            _method.__doc__ = inspect.getdoc(getattr(SummaryWriter, mname))
             attrs[mname] = _method
         return super().__new__(cls, name, bases, attrs)
 
 
-class Tensorplex(metaclass=_DelegateMethod):
+class TensorplexServer(metaclass=_DelegateMethod):
     EXCLUDE_METHODS = [
         'start_server',
         'register_normal_group',
@@ -117,11 +75,13 @@ class Tensorplex(metaclass=_DelegateMethod):
     For example, ':learning:rate/my/group/eps' is under
         "<client_id>.learning.rate" section.
     """
-    def __init__(self, folder, parallel_mode='process'):
+    def __init__(self, folder):
         """
         Args:
             folder: tensorboard file root folder
-            parallel_mode: 'process' or 'thread'
+            normal_groups: list of normal group names
+            indexed_groups: list of indexed group names
+            index_bin_sizes: list of bin sizes for each numbered group
         """
         self.folder = os.path.expanduser(folder)
         mkdir(self.folder)
@@ -131,29 +91,17 @@ class Tensorplex(metaclass=_DelegateMethod):
         self._indexed_bin_size = {}
         self.combined_groups = []
         self._combined_tag_to_bin_name = {}
-        self._writer_queues = {}  # writer ID: multiprocess.Queue
-        assert parallel_mode in ['process', 'thread']
-        self._is_process = parallel_mode == 'process'
-        # to be used in the delegated methods, call `_set_client_id()` first
-        # self._current_client_id = None
 
-    def _add_writer_process(self, sub_folder):
-        if sub_folder in self._writer_queues:  # already exists
-            return self._writer_queues[sub_folder]
-        q = mp.Queue() if self._is_process else queue.Queue()
-        Parallelizer = mp.Process if self._is_process else threading.Thread
-        proc = Parallelizer(
-            target=_run_worker_process,
-            args=(self.folder, sub_folder, q)
-        )
-        proc.daemon = True  # terminate once parent terminates
-        proc.start()
-        self._writer_queues[sub_folder] = q
-        return q
+        self._writers = {}  # subfolder_path: SummaryWriter instance
+        # following are used in the meta-class method delegation
+        self._current_tag = None
+        self._current_writer = None
 
     def register_normal_group(self, name):
         self.normal_groups.append(name)
-        self._add_writer_process(name)
+        subfolder = os.path.join(self.folder, name)
+        mkdir(subfolder)
+        self._writers[name] = SummaryWriter(subfolder)
         return self
 
     def register_combined_group(self, name, tag_to_bin_name):
@@ -194,6 +142,18 @@ class Tensorplex(metaclass=_DelegateMethod):
         self._indexed_bin_size[name] = bin_size
         return self
 
+    def _get_sub_writer(self, group, index):
+        """
+        Used by both indexed group and combined group
+        """
+        writerID = '{}/{}'.format(group, index)
+        if writerID not in self._writers:
+            # index doesn't exist yet, create a new writer
+            subfolder = os.path.join(self.folder, writerID)
+            mkdir(subfolder)
+            self._writers[writerID] = SummaryWriter(subfolder)
+        return self._writers[writerID]
+
     def _index_bin_name(self, group, ID):
         bin_size = self._indexed_bin_size[group]
         start = ID // bin_size * bin_size
@@ -215,7 +175,7 @@ class Tensorplex(metaclass=_DelegateMethod):
             'returned bin_name {} must be a string'.format(bin_name)
         return bin_name
 
-    def _get_client_tag(self, client_id):
+    def _set_client_id(self, client_id):
         """
         Client ID needs to be in the form of "<group>/<id>"
         For NumberedGroup, <id> must be an int, the group will be placed into bins
@@ -224,9 +184,6 @@ class Tensorplex(metaclass=_DelegateMethod):
         the next graph, etc.
         Each ID in the NumberedGroup will be assigned a separate subfolder
         e.g. <root>/agent/16/, <root>/agent/42/
-
-        Returns:
-            (client_tag to be passed to TensorplexWorker, corresponding queue)
         """
         assert '/' in client_id
         _parts = client_id.split('/')
@@ -234,26 +191,24 @@ class Tensorplex(metaclass=_DelegateMethod):
         group, ID = _parts
         if group in self.normal_groups:
             # normal group root tag is simply ID
-            return (
-                ID,
-                self._writer_queues[group]
-            )
+            self._current_tag = ID
+            self._current_writer = self._writers[group]
         elif group in self.combined_groups:
             # combined group's tag is tuple ("group", "pre-defined bin name")
-            queue = self._add_writer_process('{}/{}'.format(group, ID))
-            return (
-                (group, self._combined_bin_name(group, ID)),
-                queue
+            self._current_tag = (
+                group,
+                self._combined_bin_name(group, ID)
             )
+            self._current_writer = self._get_sub_writer(group, ID)
         elif group in self.indexed_groups:
             assert str.isdigit(ID), 'indexed group ID must be int'
             ID = int(ID)
-            queue = self._add_writer_process('{}/{}'.format(group, ID))
             # indexed group's current tag is a tuple ("agent", "8-15")
-            return (
-                (group, self._index_bin_name(group, ID)),
-                queue
+            self._current_tag = (
+                group,
+                self._index_bin_name(group, ID)
             )
+            self._current_writer = self._get_sub_writer(group, ID)
         else:
             all_groups = (
                 self.normal_groups
@@ -266,7 +221,7 @@ class Tensorplex(metaclass=_DelegateMethod):
                 raise ValueError('Group "{}" not found. Available groups: {}'
                                  .format(group, all_groups))
 
-    def add_scalars(self, tag_scalar_dict, global_step, *, _client_id_):
+    def add_scalars(self, tag_scalar_dict, global_step):
         """
         Tensorplex's add_scalars() is simply calling add_scalar() multiple times.
         It is NOT the same as `add_scalars()` in the original Tensorboard-pytorch
@@ -275,24 +230,47 @@ class Tensorplex(metaclass=_DelegateMethod):
         http://tensorboard-pytorch.readthedocs.io/en/latest/_modules/tensorboardX/writer.html#SummaryWriter.add_scalars
         """
         for tag, value in tag_scalar_dict.items():
-            self.add_scalar(tag, value,
-                            global_step=global_step, _client_id_=_client_id_)
+            self.add_scalar(tag, value, global_step=global_step)
 
-    def export_json(self, json_dir):
+    def export_scalar_dict(self):
         """
         Format: {writer_id : [[timestamp, step, value], ...] ...}
-        Save to <root>/<json_dir>
+
+        http://tensorboard-pytorch.readthedocs.io/en/latest/_modules/tensorboardX/writer.html#SummaryWriter.export_scalars_to_json
         """
-        json_dir = os.path.expanduser(os.path.join(self.folder, json_dir))
-        mkdir(json_dir)
-        for writerID, queue in self._writer_queues.items():
-            writerID = writerID.replace('/', '.')
-            json_path = os.path.join(json_dir, writerID+'.json')
-            queue.put(('export_json', None, (json_path,), {}))
+        return {writerID: writer.scalar_dict
+                for writerID, writer
+                in self._writers.items()}
+
+    def export_json(self, file_path, indent=4):
+        """
+        Format: {writer_id : [[timestamp, step, value], ...] ...}
+        """
+        file_path = os.path.expanduser(file_path)
+        with open(file_path, 'w') as f:
+            json.dump(self.export_scalar_dict(), f, indent=indent)
+
+    def start_server(self, host, port):
+        RemoteCall(
+            self,
+            host=host,
+            port=port,
+            queue_name=self.__class__.__name__,
+            has_client_id=True,
+            has_return_value=False
+        ).run()
 
     def get_proxy(self, client_id):
-        return LocalProxy(self, client_id, exclude_methods=[
-            'register_normal_group',
-            'register_indexed_group',
-            'register_combined_group',
-        ])
+        """
+        Must be called AFTER registering all the groups!
+        """
+        return LocalProxy(self, client_id,
+                          exclude_methods=self.EXCLUDE_METHODS)
+
+
+TensorplexClient = RemoteCall.make_client_class(
+    TensorplexServer,
+    new_cls_name='TensorplexClient',
+    has_return_value=False,
+    exclude_methods=TensorplexServer.EXCLUDE_METHODS,
+)

@@ -1,6 +1,7 @@
-import multiprocessing
 import inspect
-from .utils import iter_methods, test_bind_partial
+import multiprocessing
+
+from tensorplex.utils import iter_methods, test_bind_partial
 
 
 class LocalProxy(object):

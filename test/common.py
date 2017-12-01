@@ -1,5 +1,6 @@
 import time
 import os, sys
+from tensorplex import *
 
 
 class Timer:

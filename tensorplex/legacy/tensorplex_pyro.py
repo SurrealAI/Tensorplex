@@ -5,10 +5,9 @@ For reference only.
 Before running the server, first run `pyro4-ns -p 8008` in command line.
 """
 import Pyro4
-from .tensorplex import Tensorplex
-from tensorplex.utils import iter_methods, test_bind_partial
-import functools
 
+from tensorplex.local_tensorplex import Tensorplex
+from tensorplex.utils import iter_methods, test_bind_partial
 
 # Pyro4.config.SERIALIZER = 'pickle'
 
