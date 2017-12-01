@@ -60,4 +60,6 @@ with Timer():
         )
         plot(t, 1 * i)
 
-    t.export_json('json')
+t.print_done()  # debugging
+# tplex.export_json('json')
+

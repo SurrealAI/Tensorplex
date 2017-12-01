@@ -2,6 +2,7 @@ import multiprocessing as mp
 import os
 import queue
 import threading
+from collections import namedtuple
 
 from tensorboardX import SummaryWriter
 from .local_proxy import LocalProxy
@@ -19,7 +20,7 @@ _DELEGATED_METHODS = [
 ]
 
 
-class _TensorplexWorker(object):
+class _Writer(object):
     def __init__(self, root_folder, sub_folder):
         # print('Launch new process', root_folder, sub_folder)
         self.folder = os.path.expanduser(os.path.join(root_folder, sub_folder))
@@ -44,14 +45,13 @@ class _TensorplexWorker(object):
                 tag = group + '/' + tag
         getattr(self.writer, _method_name_)(tag, *args, **kwargs)
 
-    def export_json(self, json_path):
+    def _export_json(self, json_path):
         self.writer.export_scalars_to_json(json_path)
 
-    def process(self, queue):
-        method_name, client_tag, args, kwargs = queue.get()
+    def process(self, method_name, client_tag, args, kwargs):
         # print('queue:', method_name, args, kwargs, '--', self.folder[-10:])
         if method_name == 'export_json':
-            self.export_json(*args, **kwargs)
+            self._export_json(*args, **kwargs)
         else:
             self._delegate(
                 *args,
@@ -61,10 +61,105 @@ class _TensorplexWorker(object):
             )
 
 
-def _run_worker_process(root_folder, sub_folder, queue):
-    worker = _TensorplexWorker(root_folder, sub_folder)
-    while True:
-        worker.process(queue)
+# notify WriterGroup on a separate process to create a new writer
+_AddWriterRequest = namedtuple('_AddWriterRequest',
+                               'writerID root_folder sub_folder')
+
+# dummy value to ask WriterGroup to print something
+# debugging: useful to check when the queue on the WriterGroup process is "done"
+_PrintRequest = namedtuple('_PrintRequest', 'writerID msg')
+
+
+class _WriterGroup(object):
+    """
+    Each WriterGroup lives on a separate process
+    """
+    def __init__(self, proc_id, queue, parallel_mode):
+        self._pool = {}  # writerID: _Writer instance
+        self._proc_id = proc_id  # process ID, for debugging
+        self._queue = queue
+        if parallel_mode == 'process':
+            self.ProcessCls = mp.Process
+        else:
+            self.ProcessCls = threading.Thread
+
+    def _add_writer(self, writerID, root_folder, sub_folder):
+        # print('newwriter', self._proc_id, writerID, root_folder, sub_folder)
+        self._pool[writerID] = _Writer(root_folder, sub_folder)
+
+    def _process(self, writerID, writer_args):
+        assert writerID in self._pool
+        writer = self._pool[writerID]
+        writer.process(*writer_args)
+
+    def _dequeue_loop(self):
+        while True:
+            msg = self._queue.get()
+            if isinstance(msg, _AddWriterRequest):
+                self._add_writer(*msg)
+            elif isinstance(msg, _PrintRequest):
+                print(*msg)  # debugging, check done
+            else:  # normal writer workload request
+                self._process(*msg)
+
+    def run(self):
+        "after run(), everything should be communicated through queue"
+        proc = self.ProcessCls(target=self._dequeue_loop)
+        proc.daemon = True
+        proc.start()
+
+
+class _ProcessPool(object):
+    def __init__(self, root_folder, max_processes, parallel_mode):
+        self._root_folder = root_folder
+        self._occupancy = []  # writer count per process, for load balancing
+        self._proc_queues = []
+        self._max_procs = max_processes
+        self._writer_id_queue = {}
+        self._parallel_mode = parallel_mode
+
+    def _select_process(self):
+        "select the next vacant process, returns queue associated"
+        assert len(self._occupancy) == len(self._proc_queues)
+        if len(self._proc_queues) < self._max_procs:
+            # create a new proc (one _WriterGroup per proc)
+            q = mp.Queue()
+            self._occupancy.append(1)
+            self._proc_queues.append(q)
+            _WriterGroup(
+                proc_id=len(self._occupancy)-1,
+                queue=q,
+                parallel_mode=self._parallel_mode
+            ).run()
+            return q
+        else:
+            # get the smallest occupancy, and return the queue
+            idx = self._occupancy.index(min(self._occupancy))
+            self._occupancy[idx] += 1
+            return self._proc_queues[idx]
+
+    def submit(self, writerID, writer_args):
+        if writerID not in self._writer_id_queue:
+            queue = self._select_process()
+            self._writer_id_queue[writerID] = queue
+            # request to add a new writer to _WriterGroup process
+            queue.put(_AddWriterRequest(
+                writerID=writerID,
+                root_folder=self._root_folder,
+                sub_folder=writerID  # by convention
+            ))
+        queue = self._writer_id_queue[writerID]
+        # now we are ready to put the real workload
+        queue.put((writerID, writer_args))
+
+    def all_writer_ids(self):
+        return list(self._writer_id_queue.keys())
+
+    def print_done(self):
+        "debugging"
+        for writerID in self.all_writer_ids():
+            queue = self._writer_id_queue[writerID]
+            queue.put(_PrintRequest(writerID, 'done'))
 
 
 class Tensorplex(object):
@@ -97,7 +192,10 @@ class Tensorplex(object):
     For example, ':learning:rate/my/group/eps' is under
         "<client_id>.learning.rate" section.
     """
-    def __init__(self, folder, parallel_mode='process'):
+    def __init__(self,
+                 folder,
+                 max_processes,
+                 parallel_mode='process'):
         """
         Args:
             folder: tensorboard file root folder
@@ -111,29 +209,16 @@ class Tensorplex(object):
         self._indexed_bin_size = {}
         self.combined_groups = []
         self._combined_tag_to_bin_name = {}
-        self._writer_queues = {}  # writer ID: multiprocess.Queue
         assert parallel_mode in ['process', 'thread']
-        self._is_process = parallel_mode == 'process'
-        # to be used in the delegated methods, call `_set_client_id()` first
-        # self._current_client_id = None
-
-    def _add_writer_process(self, sub_folder):
-        if sub_folder in self._writer_queues:  # already exists
-            return self._writer_queues[sub_folder]
-        q = mp.Queue() if self._is_process else queue.Queue()
-        Parallelizer = mp.Process if self._is_process else threading.Thread
-        proc = Parallelizer(
-            target=_run_worker_process,
-            args=(self.folder, sub_folder, q)
+        # TODO handle processes = 0
+        self._process_pool = _ProcessPool(
+            root_folder=folder,
+            max_processes=max_processes,
+            parallel_mode=parallel_mode
         )
-        proc.daemon = True  # terminate once parent terminates
-        proc.start()
-        self._writer_queues[sub_folder] = q
-        return q
 
     def register_normal_group(self, name):
         self.normal_groups.append(name)
-        self._add_writer_process(name)
         return self
 
     def register_combined_group(self, name, tag_to_bin_name):
@@ -206,7 +291,7 @@ class Tensorplex(object):
         e.g. <root>/agent/16/, <root>/agent/42/
 
         Returns:
-            (client_tag to be passed to TensorplexWorker, corresponding queue)
+            (client_tag to be passed to TensorplexWorker, writerID)
         """
         assert '/' in client_id
         _parts = client_id.split('/')
@@ -216,23 +301,21 @@ class Tensorplex(object):
             # normal group root tag is simply ID
             return (
                 ID,
-                self._writer_queues[group]
+                group
             )
         elif group in self.combined_groups:
             # combined group's tag is tuple ("group", "pre-defined bin name")
-            queue = self._add_writer_process('{}/{}'.format(group, ID))
             return (
                 (group, self._combined_bin_name(group, ID)),
-                queue
+                '{}/{}'.format(group, ID)
             )
         elif group in self.indexed_groups:
             assert str.isdigit(ID), 'indexed group ID must be int'
             ID = int(ID)
-            queue = self._add_writer_process('{}/{}'.format(group, ID))
             # indexed group's current tag is a tuple ("agent", "8-15")
             return (
                 (group, self._index_bin_name(group, ID)),
-                queue
+                '{}/{}'.format(group, ID)
             )
         else:
             all_groups = (
@@ -255,8 +338,12 @@ class Tensorplex(object):
         http://tensorboard-pytorch.readthedocs.io/en/latest/_modules/tensorboardX/writer.html#SummaryWriter.add_scalars
         """
         for tag, value in tag_scalar_dict.items():
-            self.add_scalar(tag, value,
-                            global_step=global_step, _client_id_=_client_id_)
+            self.add_scalar(
+                tag,
+                value,
+                global_step=global_step,
+                _client_id_=_client_id_
+            )
 
     def export_json(self, json_dir):
         """
@@ -265,20 +352,32 @@ class Tensorplex(object):
         """
         json_dir = os.path.expanduser(os.path.join(self.folder, json_dir))
         mkdir(json_dir)
-        for writerID, queue in self._writer_queues.items():
-            writerID = writerID.replace('/', '.')
-            json_path = os.path.join(json_dir, writerID+'.json')
-            queue.put(('export_json', None, (json_path,), {}))
+        for writerID in self._process_pool.all_writer_ids():
+            json_path = os.path.join(
+                json_dir,
+                writerID.replace('/', '.')+'.json'
+            )
+            self._process_pool.submit(
+                writerID,
+                ('export_json', None, (json_path,), {})
+            )
 
     def proxy(self, client_id):
         return LocalProxy(self, client_id,
                           exclude=self._EXCLUDE_METHODS)
 
+    def print_done(self):
+        "debugging only"
+        self._process_pool.print_done()
 
-def _wrap_method(fname, old_method):
+
+def _wrap_method(method_name, old_method):
     def _method(self, *args, _client_id_, **kwargs):
-        client_tag, queue = self._get_client_tag(_client_id_)
-        queue.put((fname, client_tag, args, kwargs))
+        client_tag, writerID = self._get_client_tag(_client_id_)
+        self._process_pool.submit(
+            writerID,
+            (method_name, client_tag, args, kwargs)
+        )
     return _method
 
 

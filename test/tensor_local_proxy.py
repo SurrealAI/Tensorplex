@@ -9,10 +9,13 @@ from test.common import *
 
 
 os.system('rm -rf ~/Temp/loggerplex/*')
-tplex = Tensorplex('~/Temp/loggerplex')
+tplex = Tensorplex(
+    '~/Temp/loggerplex',
+    max_processes=4,
+)
 
 
-if 1:  # show docs!
+if 0:  # show docs!
     for fname, func in iter_methods(tplex):
         print('='*20, fname, '='*20)
         print(inspect.getdoc(func))
@@ -78,5 +81,12 @@ with Timer():
     run2()
     run3()
 
-time.sleep(30)
-tplex.export_json('json')
+tplex.print_done()  # debugging
+# tplex.export_json('json')
+
+print('begin counting')
+i = 0
+while True:
+    time.sleep(1)
+    i += 1
+    print(i, 's')
