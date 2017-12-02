@@ -28,7 +28,7 @@ class TensorplexClient(object):
         zmqueue = ZmqQueueClient(
             host=host,
             port=port,
-            batch_interval=0.2,
+            flush_time=0.2,
         )
         self._ZMQUEUE[host, port] = zmqueue
         return zmqueue

@@ -67,7 +67,7 @@ class ZmqQueueClient(object):
     def __init__(self,
                  host,
                  port,
-                 batch_interval,
+                 flush_time,
                  use_pickle=True,
                  start_thread=True):
         context = zmq.Context()
@@ -77,7 +77,7 @@ class ZmqQueueClient(object):
             host = '127.0.0.1'
         self.socket.connect("tcp://{}:{}".format(host, port))
         self._use_pickle = use_pickle
-        self._batch_interval = batch_interval
+        self._flush_time = flush_time
         if self._use_pickle:
             self._send = self.socket.send_pyobj
         else:
@@ -86,7 +86,7 @@ class ZmqQueueClient(object):
         self._batch_lock = threading.Lock()
 
         self.batch_thread = None
-        if self._batch_interval > 0 and start_thread:
+        if self._flush_time > 0 and start_thread:
             self.start_batch_thread()
 
     def start_batch_thread(self):
@@ -103,10 +103,10 @@ class ZmqQueueClient(object):
                 with self._batch_lock:
                     self._send(self._batch_buffer)
                     self._batch_buffer.clear()
-            time.sleep(self._batch_interval)
+            time.sleep(self._flush_time)
 
     def enqueue(self, obj):
-        if self._batch_interval == 0:  # no batching
+        if self._flush_time == 0:  # no batching
             self._send(obj)
         else:
             with self._batch_lock:

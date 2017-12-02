@@ -3,9 +3,9 @@ from tensorplex.zmq_queue import *
 
 
 q = ZmqQueueClient(host='127.0.0.1',
-               port=8038,
-               batch_interval=0,
-               max_zmq_buffer=3)
+                   port=8038,
+                   flush_time=0,
+                   max_zmq_buffer=3)
 
 for i in range(100):
     q.enqueue('obj'+str(i))
