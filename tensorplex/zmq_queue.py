@@ -30,7 +30,9 @@ class ZmqQueueServer(object):
         # TODO use router-dealer pattern to stall the sender when recv is full
         # https://github.com/zeromq/pyzmq/issues/1111
         self.socket.set_hwm(100)
-        self.socket.bind("tcp://127.0.0.1:{}".format(port))
+        # WARNING: MUST be tcp://*, should not bind to localhost, otherwise
+        # won't listen to connections from outside the node!
+        self.socket.bind("tcp://*:{}".format(port))
         self._use_pickle = use_pickle
         self._is_batched = is_batched
 
