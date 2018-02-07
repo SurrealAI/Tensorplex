@@ -1,0 +1,16 @@
+Metadata-Version: 1.1
+Name: Tensorplex
+Version: 0.1
+Summary: Distributed wrapper for Tensorboard
+Home-page: http://github.com/StanfordVL/Tensorplex
+Author: Jim Fan
+Author-email: UNKNOWN
+License: GPLv3
+Description-Content-Type: UNKNOWN
+Description: UNKNOWN
+Keywords: Machine Learning,Distributed Computing
+Platform: UNKNOWN
+Classifier: Development Status :: 2 - Pre-Alpha
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Environment :: Console
+Classifier: Programming Language :: Python :: 3
