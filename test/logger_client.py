@@ -2,14 +2,16 @@ from test.common import *
 import traceback
 import io
 
-client = 0
+client = 2
 
 logger = LoggerplexClient(
     client_id='agent'+str(client),
     host='localhost',
     port=6379,
+    enable_local_logger=True,
+    local_logger_stream='stderr'
 )
-print(dir(logger))
+print([_method for _method in dir(logger) if not _method.startswith('__')])
 
 logger.info('client', client)
 logger.info7('client', client)

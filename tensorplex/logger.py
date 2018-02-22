@@ -312,14 +312,14 @@ class Logger(metaclass=_NewFormatMeta):
 
         Notes:
             log format rules:
-            levelname> [format] ...your message...
+            levelname> [preamble] ...your message...
 
             If show_level is True, `levelname> ` will be the first
-            If format is None and time_format is None, nothing prints
-            If format is None and time_format specified, print time
+            If format is None and time_format is None, no preamble prints
+            If format is None and time_format specified, print time preamble
             If format specified, time_format will take effect only if
                 '{asctime}' is contained in the format.
-            E.g. if format is empty string, nothing will print even if
+            E.g. if format is empty string, no preamble prints even if
             time_format is set.
 
         References:

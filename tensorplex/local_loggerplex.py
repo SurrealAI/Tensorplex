@@ -25,6 +25,7 @@ class Loggerplex(object):
         self._show_level = show_level
 
     def _get_client_logger(self, client_id):
+        client_id = str(client_id)
         if client_id not in self._loggers:
             log_file = os.path.join(self.folder, client_id + '.log')
             self.log_files[client_id] = log_file
