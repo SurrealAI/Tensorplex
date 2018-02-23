@@ -344,7 +344,15 @@ class Logger(metaclass=_NewFormatMeta):
         return self
     
     @classmethod
-    def get_logger(cls, name, *args, **kwargs):
+    def get_logger(cls, name,
+                   level=None,
+                   file_name=None,
+                   file_mode='a',
+                   format=None,
+                   time_format=None,
+                   show_level=False,
+                   stream=None,
+                   reset_handlers=False):
         """
         Returns:
           a logger with the same config args as `.configure(...)`
@@ -355,11 +363,20 @@ class Logger(metaclass=_NewFormatMeta):
           set `propagate` to False to prevent double-printing
           https://stackoverflow.com/questions/11820338/replace-default-handler-of-python-logger
         """
-        if not Logger.exists(name) and 'level' not in kwargs:
-            kwargs['level'] = logging.INFO
+        if not Logger.exists(name) and level is None:
+            level = logging.INFO
         raw_logger = logging.getLogger(name)
         raw_logger.propagate = False
-        return cls(raw_logger).configure(*args, **kwargs)
+        return cls(raw_logger).configure(
+            level=level,
+            file_name=file_name,
+            file_mode=file_mode,
+            format=format,
+            time_format=time_format,
+            show_level=show_level,
+            stream=stream,
+            reset_handlers=reset_handlers
+        )
     
     @classmethod
     def wrap_logger(cls, logger):
