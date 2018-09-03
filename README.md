@@ -13,7 +13,7 @@ Go to `Tensorplex/examples/`. Change the tensorboard log folder in `run_server.p
 
 In one command line window, run `python run_server.py`. Then in another window, run `python run_client.py`. The server script should print out a list of `dones`.
 
-Use `tensorboard --logdir ~/Temp/tensorplex/ --port 8008` to view the results.
+Use `tensorboard --logdir ~/Temp/tensorplex/ --port 8009` to view the results.
 
 ## Manual
 
