@@ -1,8 +1,16 @@
 # Tensorplex: distributed Tensorboard and distributed logging
 
+Tensorplex is a multiplexed extension of the popular Tensorboard visualization tool. When you have a cluster, you can collect the learning curves from multiple running nodes and display them side-by-side on a single tensorboard web page. 
+
+Tensorplex makes extensive use of ZeroMQ under the hood, an efficient, robust, and lightweight distributed communication protocol. 
+
+`Loggerplex` is a subcomponent of Tensorplex that does lightweight distributed logging. It collects the real-time logs from multiple nodes and send them to a single master node for persistent book-keeping. 
+
+Tensorplex is not tied to Tensorflow and can be used with any machine learning frameworks that support numpy. 
+
 ## Installation
 
-```python
+```bash
 git clone https://github.com/StanfordVL/Tensorplex.git
 pip install -e Tensorplex/
 ```
@@ -13,7 +21,7 @@ Go to `Tensorplex/examples/`. Change the tensorboard log folder in `run_server.p
 
 In one command line window, run `python run_server.py`. Then in another window, run `python run_client.py`. The server script should print out a list of `dones`.
 
-Use `tensorboard --logdir ~/Temp/tensorplex/ --port 8008` to view the results.
+Use `tensorboard --logdir ~/Temp/tensorplex/ --port 8009` to view the results.
 
 ## Manual
 
@@ -83,8 +91,3 @@ client.add_scalar(tag, 3.1415, integer_step)
 client.add_scalars({tag: 3.1415, tag2: 2.71828, tag3: 42}, integer_step)
 ```
 
-There are
-
-Note that `tag` in `add_scalar` behaves differently for different client group types.
-
-For normal group,
