@@ -91,3 +91,8 @@ client.add_scalar(tag, 3.1415, integer_step)
 client.add_scalars({tag: 3.1415, tag2: 2.71828, tag3: 42}, integer_step)
 ```
 
+There are
+
+Note that `tag` in `add_scalar` behaves differently for different client group types.
+
+For normal group,
