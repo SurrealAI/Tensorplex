@@ -1,8 +1,16 @@
 # Tensorplex: distributed Tensorboard and distributed logging
 
+Tensorplex is a multiplexed extension of the popular Tensorboard visualization tool. When you have a cluster, you can collect the learning curves from multiple running nodes and display them side-by-side on a single tensorboard web page. 
+
+Tensorplex makes extensive use of ZeroMQ under the hood, an efficient, robust, and lightweight distributed communication protocol. 
+
+`Loggerplex` is a subcomponent of Tensorplex that does lightweight distributed logging. It collects the real-time logs from multiple nodes and send them to a single master node for persistent book-keeping. 
+
+Tensorplex is not tied to Tensorflow and can be used with any machine learning frameworks that support numpy. 
+
 ## Installation
 
-```python
+```bash
 git clone https://github.com/StanfordVL/Tensorplex.git
 pip install -e Tensorplex/
 ```
