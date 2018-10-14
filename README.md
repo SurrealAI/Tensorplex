@@ -6,7 +6,9 @@ Tensorplex makes extensive use of ZeroMQ under the hood, an efficient, robust, a
 
 `Loggerplex` is a subcomponent of Tensorplex that does lightweight distributed logging. It collects the real-time logs from multiple nodes and send them to a single master node for persistent book-keeping. 
 
-Tensorplex is not tied to Tensorflow and can be used with any machine learning frameworks that support numpy. 
+Tensorplex is not tied to Tensorflow and can be used with any machine learning frameworks that support numpy.
+
+THIS DOC IS INCOMPLETE. MORE COMING SOON.
 
 ## Installation
 
