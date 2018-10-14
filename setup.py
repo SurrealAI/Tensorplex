@@ -1,5 +1,5 @@
 import os
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 def read(fname):
@@ -17,7 +17,9 @@ setup(
     keywords=['Machine Learning',
               'Distributed Computing'],
     license='GPLv3',
-    packages=['tensorplex'],
+    packages=[
+        package for package in find_packages() if package.startswith("tensorplex")
+    ],
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
