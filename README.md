@@ -46,11 +46,10 @@ tplex = Tensorplex(
 
 Second, register the client groups, which helps group Tensorflow curves into the same or different graph windows. The "client IDs" (explained later) in your client scripts must be consistent with the groups you register in the server.
 
-There are 3 types of client groups:
+There are 2 types of client groups:
 
 1. `register_normal_group(name)`: each graph will have only one curve in a normal group.
 2. `register_indexed_group(name, bin_size)`: each graph will have at most `bin_size` number of curves. Suppose you launch 42 agents with `bin_size=10`, the curves of agent 0-9 will be displayed in the same graph window; likewise, the curves of 10-19, 20-29, 30-39, 40-41 will be grouped in their respective graphs.
-3. `register_combined_group(name, group_criterion)`: TODO
 
 
 To register multiple groups, you can chain the commands:
@@ -60,7 +59,6 @@ To register multiple groups, you can chain the commands:
     .register_normal_group('learner')  # 1 curve per graph
     .register_indexed_group('agent', 8)  # 8 agent learning curves per graph
     .register_indexed_group('eval', 4)  # 4 eval curves per graph
-    .register_combined_group('eval', get_eval_bin_name)
  )
 ```
 
@@ -92,9 +90,3 @@ client.add_scalar(tag, 3.1415, integer_step)
 # add_scalars is equivalent to multiple add_scalar() in one line
 client.add_scalars({tag: 3.1415, tag2: 2.71828, tag3: 42}, integer_step)
 ```
-
-There are
-
-Note that `tag` in `add_scalar` behaves differently for different client group types.
-
-For normal group,
